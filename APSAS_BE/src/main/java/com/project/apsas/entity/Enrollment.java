@@ -1,0 +1,55 @@
+package com.project.apsas.entity;
+
+import com.project.apsas.enums.EnrollmentRole;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
+@Entity
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@EqualsAndHashCode(of = {"userId", "courseId"})
+@Table(name = "enrollments")
+@IdClass(Enrollment.PK.class)
+public class Enrollment {
+ @Id
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
+
+    @Id
+    @Column(name = "course_id", nullable = false)
+    private Long courseId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10)
+    private EnrollmentRole role;
+
+    @Column(name = "joined_at", insertable = false, updatable = false)
+    private LocalDateTime joinedAt;
+
+    // Quan hệ tới User
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    private User user;
+
+    // Quan hệ tới Course
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_id", insertable = false, updatable = false)
+    private Course course;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PK implements Serializable {
+        private Long userId;
+        private Long courseId;
+}
+}
+
+

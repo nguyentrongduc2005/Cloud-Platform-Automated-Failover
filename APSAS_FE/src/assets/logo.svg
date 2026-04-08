@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6fe7f6"/>
+      <stop offset="100%" stop-color="#18c5e4"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1ad0d9" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#00a2c8" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded square background -->
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#071014" />
+
+  <!-- main mark: stylized A made of two paths -->
+  <g transform="translate(8,8) scale(0.8)">
+    <path d="M24 4 L40 44 L8 44 Z" fill="url(#g)" opacity="0.98" />
+    <path d="M24 12 L32 36 L16 36 Z" fill="url(#g2)" opacity="0.95" />
+  </g>
+
+</svg>

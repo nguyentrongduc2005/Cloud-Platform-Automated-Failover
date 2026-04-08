@@ -1,0 +1,48 @@
+package com.project.apsas.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
+@Entity
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@EqualsAndHashCode(of = {"userId", "notificationId"})
+@IdClass(UserNotification.PK.class)
+@Table(name = "users_notifications")
+public class UserNotification {
+
+    @Id
+    @Column(name = "users_id")
+    private Long userId;
+
+    @Id
+    @Column(name = "notifications_id")
+    private Long notificationId;
+
+    @Column(name = "is_read")
+    private Boolean isRead;
+
+    @Column(name = "read_at")
+    private LocalDateTime readAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "users_id", insertable = false, updatable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "notifications_id", insertable = false, updatable = false)
+    private Notification notification;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PK implements Serializable {
+        private Long userId;
+        private Long notificationId;
+    }
+}

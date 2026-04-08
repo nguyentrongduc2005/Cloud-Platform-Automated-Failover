@@ -1,0 +1,32 @@
+package com.project.apsas.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@EqualsAndHashCode(of = {"id"})
+@Table(name = "feedback")
+public class Feedback {
+ @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String body;
+
+    @Column(name = "created_at", insertable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "submission_id", nullable = false)
+    private Long submissionId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "submission_id", insertable = false, updatable = false)
+    private Submission submission;
+}
