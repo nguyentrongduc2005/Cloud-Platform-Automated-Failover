@@ -131,7 +131,7 @@ export default function Login() {
                 onClick={() => {
                   // Chuyển hướng đến OAuth2 endpoint của backend
                   window.location.href =
-                    api.baseURL + "/oauth2/authorization/google";
+                     api.defaults.baseURL + "/oauth2/authorization/google";
                 }}
               >
                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">

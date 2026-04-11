@@ -1,69 +1,146 @@
-services:
-    db:
-      image: mysql:8.0
-      container_name: mysql_db
-      environment:
-        MYSQL_ROOT_PASSWORD: 123
-        MYSQL_DATABASE: apsas_db
-        MYSQL_USER: user
-        MYSQL_PASSWORD: 1234
-      ports:
-           -  "3308:3306"
-      volumes:
-        - ./data:/var/lib/mysql
-        - ./mysql:/docker-entrypoint-initdb.d
-      healthcheck:
-          test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD" ]
-          interval: 10s
-          timeout: 5s
-          retries: 5
-         # Them Redis
-    redis:
-      image: redis:latest
-      container_name: apsasredis
-      ports:
-        - "6379:6379"
-      volumes:
-        - ./redis_data:/data # Sẽ tạo thư mục 'redis_data'
-      healthcheck:
-        test: [ "CMD", "redis-cli", "ping" ]
-        interval: 10s
-        timeout: 5s
-        retries: 5
-    kafka:
-      image: apache/kafka:4.1.0
-      container_name: kafka
-      restart: unless-stopped
-      environment:
-        - KAFKA_PROCESS_ROLES=broker,controller
-        - KAFKA_NODE_ID=1
-        - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
-        - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+version: '3.8'
 
-        # Listeners: trong Docker (9092), ngoài Docker/IDE (9094), controller (9093)
-        - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:9094
-        - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
-        - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
-        # hạ comsumer offset và transaction state để chạy 1 cluster
-        - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-        - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-        - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
-        # Tuỳ chọn cho dev
-        - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
-        - KAFKA_NUM_PARTITIONS=3
-        - KAFKA_DEFAULT_REPLICATION_FACTOR=1
-        - KAFKA_LOG_RETENTION_HOURS=24
-        - TZ=Asia/Ho_Chi_Minh
-      ports:
-        - "9094:9094"
-    kafka-ui:
-      image: provectuslabs/kafka-ui:latest
-      container_name: kafka-ui
-      restart: unless-stopped
-      environment:
-        KAFKA_CLUSTERS_0_NAME: local
-        KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-      ports:
-        - "9090:8080"
-      depends_on:
-        - kafka
+# ==========================================
+# KHAI BÁO MẠNG ẢO CHO TOÀN HỆ THỐNG
+# ==========================================
+networks:
+  codeverse_network:
+    driver: bridge
+
+services:
+  # ==========================================
+  # 1. HỆ QUẢN TRỊ CƠ SỞ DỮ LIỆU (MYSQL)
+  # ==========================================
+  db:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: unless-stopped
+    networks:
+      - codeverse_network
+    environment:
+      MYSQL_ROOT_PASSWORD: 123
+      MYSQL_DATABASE: apsas_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: 1234
+    ports:
+      - "3308:3306"
+    volumes:
+      - ./data:/var/lib/mysql
+      - ./mysql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 2. CACHE & SESSION (REDIS)
+  # ==========================================
+  redis:
+    image: redis:latest
+    container_name: apsasredis
+    restart: unless-stopped
+    networks:
+      - codeverse_network
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 3. MESSAGE BROKER (KAFKA - KRAFT MODE)
+  # ==========================================
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: kafka
+    restart: unless-stopped
+    networks:
+      - codeverse_network
+    environment:
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_NODE_ID=1
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      # Listeners: 9092 (Nội bộ Docker), 9094 (Truy cập từ bên ngoài), 9093 (Controller)
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:9094
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_NUM_PARTITIONS=3
+      - KAFKA_DEFAULT_REPLICATION_FACTOR=1
+      - KAFKA_LOG_RETENTION_HOURS=24
+      - TZ=Asia/Ho_Chi_Minh
+    ports:
+      - "9094:9094"
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    networks:
+      - codeverse_network
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    ports:
+      - "9090:8080"
+    depends_on:
+      - kafka
+
+  # ==========================================
+  # 4. BACKEND API (SPRING BOOT)
+  # ==========================================
+  backend:
+    image: codeverse-backend:latest
+    container_name: codeverse_api
+    restart: unless-stopped
+    networks:
+      - codeverse_network
+    ports:
+      - "8080:8080"
+    # Đọc các API key nhạy cảm (Gemini, Brevo, JWT...) từ file .env
+    env_file:
+      - .env
+    environment:
+      # Ghi đè URL kết nối bằng TÊN CONTAINER
+      MYSQL: jdbc:mysql://db:3306/apsas_db
+      USER: user
+      PASS: 1234
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA: kafka:9092
+      PORT: 8080
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  # ==========================================
+  # 5. FRONTEND (REACT - NGINX)
+  # ==========================================
+  frontend:
+    image: my-react-app:latest
+    container_name: codeverse_ui
+    restart: unless-stopped
+    networks:
+      - codeverse_network
+    ports:
+      - "80:80"
+    environment:
+      # Truyền API Base URL vào Frontend thông qua Entrypoint Script đã cấu hình
+      # Lưu ý: Vì code Frontend chạy trên trình duyệt của người dùng, nên URL phải là địa chỉ
+      # mà trình duyệt có thể gọi được (ví dụ: localhost hoặc tên miền thực tế).
+      VITE_API_BASE: "http://localhost:8080/api"
+    depends_on:
+      - backend

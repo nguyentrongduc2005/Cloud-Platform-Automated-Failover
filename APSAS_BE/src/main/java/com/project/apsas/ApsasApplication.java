@@ -9,7 +9,6 @@ import org.springframework.kafka.annotation.EnableKafkaStreams;
 
 import java.util.TimeZone;
 
-
 @SpringBootApplication
 @EnableFeignClients
 @EnableKafka

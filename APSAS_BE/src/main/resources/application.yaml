@@ -6,7 +6,6 @@ server:
     include-message: never
 
 spring:
-
   application:
     name: CodeVerse
   data:
@@ -17,10 +16,10 @@ spring:
     model:
       chat: openai
     openai:
-      api-key: ${GEMINI_API_KEY}        # dùng Gemini API key
+      api-key: ${GEMINI_API_KEY} # dùng Gemini API key
       chat:
         base-url: https://generativelanguage.googleapis.com
-        api-key: ${GEMINI_API_KEY}     # hoặc spring.ai.openai.chat.api-key (tùy version)
+        api-key: ${GEMINI_API_KEY} # hoặc spring.ai.openai.chat.api-key (tùy version)
         options:
           model: gemini-2.5-flash
         completions-path: /v1beta/openai/chat/completions
@@ -62,21 +61,21 @@ spring:
       max-request-size: 10MB
       max-file-size: 10MB
   security:
-      oauth2:
-        client:
-          registration:
-            google:
-              client-id: ${GGCLIENTID}
-              client-secret: ${GGCLIENT_SECRET}
-              scope: email, profile
-          provider:
-            google:
-              authorization-uri: https://accounts.google.com/o/oauth2/auth
-              token-uri: https://oauth2.googleapis.com/token
-              user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GGCLIENTID}
+            client-secret: ${GGCLIENT_SECRET}
+            scope: email, profile
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/auth
+            token-uri: https://oauth2.googleapis.com/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
   frontend:
     url: ${URLFONTEND}
-#    https://apsas-fe.vercel.app
+  #    https://apsas-fe.vercel.app
   kafka:
     bootstrap-servers: ${KAFKA}
     consumer:
@@ -121,7 +120,7 @@ message-queue:
 
 cloudinary:
   cloud-name: ddcyjcpx0
-  api-key: 197971381659871
+  api-key: ${API_KEY_CLOUDINARY}
   api-secret: ${API_SECRET_CLOUDINARY}
   option:
     folder-name: uploads/general
@@ -136,8 +135,6 @@ jwt:
   valid-duration: 3600 # in second
   refreshable-duration: 36000 # in seconds
 
-
-
 brevo:
   base-url: https://api.brevo.com/v3
   api-key: ${API_KEY_BREVO}
@@ -148,18 +145,15 @@ brevo:
 jubge:
   base-url: https://ce.judge0.com
 
-
 mvc:
   throw-exception-if-no-handler-found: true
 
 web:
   resources:
-    add-mappings: false 
+    add-mappings: false
 
 app:
   name: CodeVerse
   kafka:
     topic:
       verify-email: verify-email
-
-

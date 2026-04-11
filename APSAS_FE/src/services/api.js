@@ -2,10 +2,17 @@
 import axios from "axios";
 
 // ==============================
+// DYNAMIC BASE URL HELPER (Clean Code)
+// ==============================
+const getBaseUrl = () => {
+  return window.__ENV__?.VITE_API_BASE || import.meta.env.VITE_API_BASE || "http://localhost:8080/api";
+};
+
+// ==============================
 // BASE CONFIG
 // ==============================
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || "http://localhost:8080/api",
+  baseURL: getBaseUrl(),
   headers: {
     "Content-Type": "application/json",
   },
@@ -74,13 +81,13 @@ async function refreshTokenService() {
   console.log("🔄 RefreshTokenService called with:", {
     refreshToken: refreshToken.substring(0, 20) + "...",
     userId: userId,
-    baseURL: import.meta.env.VITE_API_BASE
+    baseURL: getBaseUrl() // <-- Đã sửa để log đúng URL thực tế
   });
 
   try {
-    // Sử dụng axios trực tiếp để tránh circular dependency với authService
+    // Sử dụng axios trực tiếp nhưng với URL linh hoạt từ getBaseUrl()
     const res = await axios.post(
-      `${import.meta.env.VITE_API_BASE || "http://localhost:8080/api"}/auth/refresh-token`,
+      `${getBaseUrl()}/auth/refresh-token`,
       {
         refreshToken,
         userId

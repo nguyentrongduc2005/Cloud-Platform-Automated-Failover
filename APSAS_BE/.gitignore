@@ -19,7 +19,7 @@ environment/redis_data
 *.iws
 *.iml
 *.ipr
-
+.env
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/

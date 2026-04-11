@@ -1,0 +1,48 @@
+# =========================
+# 1. Thư mục Build của Maven
+# =========================
+# Bỏ qua thư mục target ở local vì chúng ta sẽ build mới hoàn toàn bên trong Docker
+target/
+*.jar
+*.war
+*.ear
+*.class
+
+# =========================
+# 2. Cấu hình của các IDE (IntelliJ, VSCode, Eclipse)
+# =========================
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+
+# =========================
+# 3. Quản lý phiên bản (Git)
+# =========================
+.git/
+.gitignore
+
+# =========================
+# 4. File Logs & Hệ điều hành
+# =========================
+*.log
+.DS_Store
+Thumbs.db
+
+# =========================
+# 5. Môi trường & Bảo mật
+# =========================
+# Cực kỳ quan trọng: Tránh vô tình copy file chứa mật khẩu/API keys vào trong Image
+.env
+.env.*
+
+# =========================
+# 6. Các file của Docker
+# =========================
+Dockerfile
+.dockerignore
+docker-compose.yml
