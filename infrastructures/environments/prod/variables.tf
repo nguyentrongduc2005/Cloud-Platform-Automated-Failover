@@ -3,9 +3,16 @@ variable "project_id" {
   description = "ID của dự án Google Cloud"
 }
 
-variable "region" {
+variable "primary_region" {
+  description = "Region chính (Active) triển khai hạ tầng"
   type        = string
-  description = "Vùng triển khai (ví dụ: asia-southeast1)"
+  default     = "asia-southeast1" # Singapore
+}
+
+variable "secondary_region" {
+  description = "Region dự phòng (Standby/Failover) triển khai hạ tầng"
+  type        = string
+  default     = "asia-east1" # Taiwan
 }
 variable "zone" {
   type = string

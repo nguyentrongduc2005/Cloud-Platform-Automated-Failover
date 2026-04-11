@@ -7,9 +7,17 @@ terraform {
   }
 }
 
+# Provider mặc định (sẽ dùng primary_region)
 provider "google" {
-  # Configuration options
   project     = var.project_id
-  region      = var.region
+  region      = var.primary_region
+  credentials = file("terraform-admin-key.json")
+}
+
+# Provider dành cho vùng dự phòng (cần gọi alias = "google.secondary" khi dùng)
+provider "google" {
+  alias       = "secondary"
+  project     = var.project_id
+  region      = var.secondary_region
   credentials = file("terraform-admin-key.json")
 }
