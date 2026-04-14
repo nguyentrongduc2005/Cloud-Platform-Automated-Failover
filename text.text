@@ -1,0 +1,9 @@
+
+database_name = "cloud_failover_db"
+database_user = "admin"
+failover_redis_ip = "10.27.116.75"
+primary_db_instance_name = "apsas-prod-primary-mysql"
+primary_db_private_ip = "10.210.0.2"
+primary_redis_ip = "10.143.152.171"
+replica_db_instance_name = "apsas-prod-failover-mysql-replica"
+replica_db_private_ip = "10.210.1.3"
