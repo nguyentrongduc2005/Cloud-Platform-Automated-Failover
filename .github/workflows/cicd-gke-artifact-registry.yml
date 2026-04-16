@@ -191,11 +191,15 @@ jobs:
           status=$?
 
           if [ $status -ne 0 ]; then
-            echo "Primary backend rollout timed out. Cleaning up terminating pods then retrying..."
-            terminating_pods=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o jsonpath='{range .items[?(@.metadata.deletionTimestamp)]}{.metadata.name}{"\n"}{end}')
+            echo "Primary backend rollout timed out. Cleaning old ReplicaSet pods then retrying..."
 
-            if [ -n "$terminating_pods" ]; then
-              echo "$terminating_pods" | while IFS= read -r pod; do
+            newest_rs=$(kubectl get rs -n "$K8S_NAMESPACE" -l app=apsas-backend --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}')
+            echo "Newest ReplicaSet: $newest_rs"
+
+            old_rs_pods=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.ownerReferences[0].name}{"\n"}{end}' | awk -v rs="$newest_rs" '$2 != rs {print $1}')
+
+            if [ -n "$old_rs_pods" ]; then
+              echo "$old_rs_pods" | while IFS= read -r pod; do
                 [ -z "$pod" ] && continue
                 kubectl delete pod "$pod" -n "$K8S_NAMESPACE" --grace-period=0 --force || true
               done
@@ -281,11 +285,15 @@ jobs:
           status=$?
 
           if [ $status -ne 0 ]; then
-            echo "Failover backend rollout timed out. Cleaning up terminating pods then retrying..."
-            terminating_pods=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o jsonpath='{range .items[?(@.metadata.deletionTimestamp)]}{.metadata.name}{"\n"}{end}')
+            echo "Failover backend rollout timed out. Cleaning old ReplicaSet pods then retrying..."
 
-            if [ -n "$terminating_pods" ]; then
-              echo "$terminating_pods" | while IFS= read -r pod; do
+            newest_rs=$(kubectl get rs -n "$K8S_NAMESPACE" -l app=apsas-backend --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}')
+            echo "Newest ReplicaSet: $newest_rs"
+
+            old_rs_pods=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.ownerReferences[0].name}{"\n"}{end}' | awk -v rs="$newest_rs" '$2 != rs {print $1}')
+
+            if [ -n "$old_rs_pods" ]; then
+              echo "$old_rs_pods" | while IFS= read -r pod; do
                 [ -z "$pod" ] && continue
                 kubectl delete pod "$pod" -n "$K8S_NAMESPACE" --grace-period=0 --force || true
               done
