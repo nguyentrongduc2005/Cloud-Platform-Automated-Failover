@@ -95,3 +95,45 @@ variable "create_mci_k8s_resources" {
   type        = bool
   default     = false
 }
+
+variable "frontend_mci_service_name" {
+  description = "Tên MultiClusterService cho frontend"
+  type        = string
+  default     = ""
+}
+
+variable "frontend_mci_ingress_name" {
+  description = "Tên MultiClusterIngress cho frontend"
+  type        = string
+  default     = ""
+}
+
+variable "frontend_mci_label_key" {
+  description = "Label key để chọn frontend pods"
+  type        = string
+  default     = "app"
+}
+
+variable "frontend_mci_label_value" {
+  description = "Label value để chọn frontend pods"
+  type        = string
+  default     = "apsas-frontend"
+}
+
+variable "frontend_mci_service_port" {
+  description = "Service port exposed by frontend MultiClusterService"
+  type        = number
+  default     = 80
+}
+
+variable "frontend_mci_target_port" {
+  description = "Target port on frontend pods"
+  type        = number
+  default     = 80
+}
+
+variable "create_frontend_mci_k8s_resources" {
+  description = "Bật để tạo MultiClusterService/Ingress cho frontend"
+  type        = bool
+  default     = false
+}

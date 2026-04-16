@@ -102,6 +102,14 @@ module "multicluster_ingress" {
   mci_service_port         = var.mci_service_port
   mci_target_port          = var.mci_target_port
   create_mci_k8s_resources = var.create_mci_k8s_resources
+
+  frontend_mci_service_name         = var.frontend_mci_service_name
+  frontend_mci_ingress_name         = var.frontend_mci_ingress_name
+  frontend_mci_label_key            = var.frontend_mci_label_key
+  frontend_mci_label_value          = var.frontend_mci_label_value
+  frontend_mci_service_port         = var.frontend_mci_service_port
+  frontend_mci_target_port          = var.frontend_mci_target_port
+  create_frontend_mci_k8s_resources = var.create_frontend_mci_k8s_resources
 }
 
 module "security_and_ci" {

@@ -83,6 +83,18 @@ output "mci_status" {
   value = module.multicluster_ingress.mci_status
 }
 
+output "frontend_mci_name" {
+  value = module.multicluster_ingress.frontend_mci_name
+}
+
+output "frontend_mcs_name" {
+  value = module.multicluster_ingress.frontend_mcs_name
+}
+
+output "frontend_mci_status" {
+  value = module.multicluster_ingress.frontend_mci_status
+}
+
 output "artifact_registry_repository" {
   value = module.security_and_ci.artifact_registry_repository
 }

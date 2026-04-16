@@ -17,3 +17,15 @@ output "mcs_name" {
 output "mci_status" {
   value = try(kubernetes_manifest.multicluster_ingress[0].object.status, null)
 }
+
+output "frontend_mci_name" {
+  value = try(kubernetes_manifest.frontend_multicluster_ingress[0].manifest.metadata.name, null)
+}
+
+output "frontend_mcs_name" {
+  value = try(kubernetes_manifest.frontend_multicluster_service[0].manifest.metadata.name, null)
+}
+
+output "frontend_mci_status" {
+  value = try(kubernetes_manifest.frontend_multicluster_ingress[0].object.status, null)
+}

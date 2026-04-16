@@ -135,3 +135,69 @@ resource "kubernetes_manifest" "multicluster_ingress" {
     google_project_service.required_apis
   ]
 }
+
+resource "kubernetes_manifest" "frontend_multicluster_service" {
+  count = var.create_frontend_mci_k8s_resources ? 1 : 0
+
+  manifest = {
+    apiVersion = "networking.gke.io/v1"
+    kind       = "MultiClusterService"
+    metadata = {
+      name      = var.frontend_mci_service_name
+      namespace = var.k8s_namespace
+    }
+    spec = {
+      template = {
+        spec = {
+          selector = {
+            (var.frontend_mci_label_key) = var.frontend_mci_label_value
+          }
+          ports = [
+            {
+              name       = "http"
+              protocol   = "TCP"
+              port       = var.frontend_mci_service_port
+              targetPort = var.frontend_mci_target_port
+            }
+          ]
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    google_gke_hub_feature.mcs,
+    google_project_service.required_apis,
+    google_gke_hub_membership.primary,
+    google_gke_hub_membership.failover
+  ]
+}
+
+resource "kubernetes_manifest" "frontend_multicluster_ingress" {
+  count = var.create_frontend_mci_k8s_resources ? 1 : 0
+
+  manifest = {
+    apiVersion = "networking.gke.io/v1"
+    kind       = "MultiClusterIngress"
+    metadata = {
+      name      = var.frontend_mci_ingress_name
+      namespace = var.k8s_namespace
+    }
+    spec = {
+      template = {
+        spec = {
+          backend = {
+            serviceName = var.frontend_mci_service_name
+            servicePort = var.frontend_mci_service_port
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    kubernetes_manifest.frontend_multicluster_service,
+    google_gke_hub_feature.mcs,
+    google_project_service.required_apis
+  ]
+}
