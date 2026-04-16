@@ -1,0 +1,60 @@
+name: Sync MCI Health Check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GKE_PRIMARY_CLUSTER: ${{ vars.GKE_PRIMARY_CLUSTER }}
+  GKE_PRIMARY_LOCATION: ${{ vars.GKE_PRIMARY_LOCATION }}
+  K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
+  MCI_NAME: apsas-backend-mci
+  DESIRED_PATH: /api/healthz
+
+jobs:
+  sync-healthcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[Auth] Authenticate to Google Cloud"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: "[Auth] Set up gcloud"
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: "[Auth] Enable GKE auth plugin"
+        run: |
+          echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> "$GITHUB_ENV"
+
+      - name: "[Sync] Resolve MCI health check and enforce path"
+        run: |
+          set +e
+          gcloud container clusters get-credentials "$GKE_PRIMARY_CLUSTER" --location "$GKE_PRIMARY_LOCATION" --project "$GCP_PROJECT_ID"
+
+          HC_NAME=$(kubectl get multiclusteringress.networking.gke.io "$MCI_NAME" -n "$K8S_NAMESPACE" -o jsonpath='{.status.CloudResources.HealthChecks[0]}' 2>/dev/null)
+          if [ -z "$HC_NAME" ]; then
+            echo "No MCI health check found, skipping."
+            exit 0
+          fi
+
+          echo "Enforcing health check $HC_NAME path=$DESIRED_PATH"
+          gcloud compute health-checks update http "$HC_NAME" \
+            --global \
+            --project "$GCP_PROJECT_ID" \
+            --request-path="$DESIRED_PATH" \
+            --check-interval=10s \
+            --timeout=5s \
+            --healthy-threshold=1 \
+            --unhealthy-threshold=3
+
+          gcloud compute health-checks describe "$HC_NAME" --global --project "$GCP_PROJECT_ID" | grep -E 'requestPath|checkIntervalSec|timeoutSec|healthyThreshold|unhealthyThreshold' || true
