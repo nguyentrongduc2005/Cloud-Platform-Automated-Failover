@@ -260,6 +260,48 @@ variable "create_frontend_mci_k8s_resources" {
   default     = false
 }
 
+variable "enable_frontend_dns" {
+  description = "Bật để tạo DNS record cho frontend"
+  type        = bool
+  default     = false
+}
+
+variable "create_frontend_dns_zone" {
+  description = "Bật để tạo Cloud DNS managed zone cho frontend domain"
+  type        = bool
+  default     = false
+}
+
+variable "frontend_dns_zone_name" {
+  description = "Tên Cloud DNS managed zone (tạo mới hoặc dùng zone sẵn có)"
+  type        = string
+  default     = "apsas-frontend-zone"
+}
+
+variable "frontend_dns_domain" {
+  description = "DNS name cho managed zone (phải có dấu chấm cuối), ví dụ: example.com."
+  type        = string
+  default     = "example.com."
+}
+
+variable "frontend_dns_record_name" {
+  description = "FQDN cho record frontend (phải có dấu chấm cuối), ví dụ: app.example.com."
+  type        = string
+  default     = "app.example.com."
+}
+
+variable "frontend_dns_ttl" {
+  description = "TTL cho frontend A record"
+  type        = number
+  default     = 300
+}
+
+variable "frontend_domain_target_ip" {
+  description = "Public IPv4 của frontend ingress để map domain"
+  type        = string
+  default     = ""
+}
+
 variable "backend_image" {
   description = "Backend container image"
   type        = string

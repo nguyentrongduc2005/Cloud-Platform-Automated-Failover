@@ -124,3 +124,30 @@ module "security_and_ci" {
   workload_identity_provider_id = var.workload_identity_provider_id
   cicd_service_account_id       = var.cicd_service_account_id
 }
+
+resource "google_dns_managed_zone" "frontend" {
+  count = var.enable_frontend_dns && var.create_frontend_dns_zone ? 1 : 0
+
+  project     = var.project_id
+  name        = var.frontend_dns_zone_name
+  dns_name    = var.frontend_dns_domain
+  description = "Public DNS zone for frontend"
+}
+
+resource "google_dns_record_set" "frontend_a" {
+  count = var.enable_frontend_dns ? 1 : 0
+
+  project      = var.project_id
+  name         = var.frontend_dns_record_name
+  managed_zone = var.create_frontend_dns_zone ? google_dns_managed_zone.frontend[0].name : var.frontend_dns_zone_name
+  type         = "A"
+  ttl          = var.frontend_dns_ttl
+  rrdatas      = [var.frontend_domain_target_ip]
+
+  lifecycle {
+    precondition {
+      condition     = var.frontend_domain_target_ip != ""
+      error_message = "frontend_domain_target_ip must be set when enable_frontend_dns=true"
+    }
+  }
+}

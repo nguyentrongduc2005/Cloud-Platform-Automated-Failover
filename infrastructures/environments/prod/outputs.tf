@@ -95,6 +95,14 @@ output "frontend_mci_status" {
   value = module.multicluster_ingress.frontend_mci_status
 }
 
+output "frontend_dns_record_fqdn" {
+  value = try(google_dns_record_set.frontend_a[0].name, null)
+}
+
+output "frontend_dns_target_ip" {
+  value = var.frontend_domain_target_ip
+}
+
 output "artifact_registry_repository" {
   value = module.security_and_ci.artifact_registry_repository
 }
