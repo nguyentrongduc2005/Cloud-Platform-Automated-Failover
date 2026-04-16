@@ -98,8 +98,11 @@ jobs:
         id: backend-image
         run: |
           BACKEND_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${BACKEND_IMAGE_NAME}:${GITHUB_SHA}"
+          BACKEND_IMAGE_LATEST="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${BACKEND_IMAGE_NAME}:latest"
           docker build -t "$BACKEND_IMAGE" APSAS_BE
           docker push "$BACKEND_IMAGE"
+          docker tag "$BACKEND_IMAGE" "$BACKEND_IMAGE_LATEST"
+          docker push "$BACKEND_IMAGE_LATEST"
           echo "backend_image=$BACKEND_IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: "[Images] Verify backend image pull"
@@ -109,8 +112,11 @@ jobs:
         id: frontend-image
         run: |
           FRONTEND_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}"
+          FRONTEND_IMAGE_LATEST="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${FRONTEND_IMAGE_NAME}:latest"
           docker build -t "$FRONTEND_IMAGE" APSAS_FE
           docker push "$FRONTEND_IMAGE"
+          docker tag "$FRONTEND_IMAGE" "$FRONTEND_IMAGE_LATEST"
+          docker push "$FRONTEND_IMAGE_LATEST"
           echo "frontend_image=$FRONTEND_IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: "[Images] Verify frontend image pull"
