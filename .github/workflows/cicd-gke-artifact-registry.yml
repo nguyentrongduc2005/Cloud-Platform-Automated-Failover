@@ -25,9 +25,8 @@ env:
   FRONTEND_SECRET_NAME: ${{ vars.FRONTEND_SECRET_NAME }}
 
 jobs:
-  build-and-deploy:
+  build-artifacts:
     runs-on: ubuntu-latest
-
     steps:
       - name: "[Prep] Checkout"
         uses: actions/checkout@v4
@@ -65,6 +64,16 @@ jobs:
         with:
           name: frontend-dist
           path: APSAS_FE/dist
+
+  publish-images:
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ steps.backend-image.outputs.backend_image }}
+      frontend_image: ${{ steps.frontend-image.outputs.frontend_image }}
+    steps:
+      - name: "[Prep] Checkout"
+        uses: actions/checkout@v4
 
       - name: "[Auth] Authenticate to Google Cloud"
         uses: google-github-actions/auth@v2
@@ -107,6 +116,13 @@ jobs:
       - name: "[Images] Verify frontend image pull"
         run: docker pull "${{ steps.frontend-image.outputs.frontend_image }}"
 
+  render-manifests:
+    needs: publish-images
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[Prep] Checkout"
+        uses: actions/checkout@v4
+
       - name: "[Deploy] Render Kubernetes manifests"
         run: |
           mkdir -p rendered
@@ -116,9 +132,41 @@ jobs:
             sed -i "s|__NAMESPACE__|${K8S_NAMESPACE}|g" "$f"
             sed -i "s|__BACKEND_SECRET__|${BACKEND_SECRET_NAME}|g" "$f"
             sed -i "s|__FRONTEND_SECRET__|${FRONTEND_SECRET_NAME}|g" "$f"
-            sed -i "s|__BACKEND_IMAGE__|${{ steps.backend-image.outputs.backend_image }}|g" "$f"
-            sed -i "s|__FRONTEND_IMAGE__|${{ steps.frontend-image.outputs.frontend_image }}|g" "$f"
+            sed -i "s|__BACKEND_IMAGE__|${{ needs.publish-images.outputs.backend_image }}|g" "$f"
+            sed -i "s|__FRONTEND_IMAGE__|${{ needs.publish-images.outputs.frontend_image }}|g" "$f"
           done
+
+      - name: "[Deploy] Upload rendered manifests"
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-manifests
+          path: rendered/*.yaml
+
+  deploy-primary:
+    needs: [publish-images, render-manifests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[Auth] Authenticate to Google Cloud"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: "[Auth] Set up gcloud"
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: "[Auth] Enable GKE auth plugin"
+        run: |
+          echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> "$GITHUB_ENV"
+          gke-gcloud-auth-plugin --version
+
+      - name: "[Deploy:Primary] Download rendered manifests"
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+          path: rendered
 
       - name: "[Deploy:Primary] Get cluster credentials"
         run: |
@@ -129,53 +177,112 @@ jobs:
           kubectl apply --validate=false -f rendered/
 
       - name: "[Deploy:Primary] Rollout backend"
+        id: primary-backend-rollout
+        continue-on-error: true
+        run: kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=900s
+
+      - name: "[Deploy:Primary] Diagnostics backend"
+        if: steps.primary-backend-rollout.outcome == 'failure'
         run: |
-          kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=900s || {
-            kubectl describe deployment apsas-backend -n "$K8S_NAMESPACE" || true
-            kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o wide || true
-            kubectl describe pods -n "$K8S_NAMESPACE" -l app=apsas-backend || true
-            kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
-            exit 1
-          }
+          kubectl describe deployment apsas-backend -n "$K8S_NAMESPACE" || true
+          kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o wide || true
+          kubectl describe pods -n "$K8S_NAMESPACE" -l app=apsas-backend || true
+          kubectl logs -n "$K8S_NAMESPACE" -l app=apsas-backend --all-containers --tail=300 || true
+          kubectl logs -n "$K8S_NAMESPACE" -l app=apsas-backend --all-containers --tail=300 --previous || true
+          kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
+
+      - name: "[Deploy:Primary] Fail if backend rollout failed"
+        if: steps.primary-backend-rollout.outcome == 'failure'
+        run: exit 1
 
       - name: "[Deploy:Primary] Rollout frontend"
+        id: primary-frontend-rollout
+        continue-on-error: true
+        run: kubectl rollout status deployment/apsas-frontend -n "$K8S_NAMESPACE" --timeout=900s
+
+      - name: "[Deploy:Primary] Diagnostics frontend"
+        if: steps.primary-frontend-rollout.outcome == 'failure'
         run: |
-          kubectl rollout status deployment/apsas-frontend -n "$K8S_NAMESPACE" --timeout=900s || {
-            kubectl describe deployment apsas-frontend -n "$K8S_NAMESPACE" || true
-            kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-frontend -o wide || true
-            kubectl describe pods -n "$K8S_NAMESPACE" -l app=apsas-frontend || true
-            kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
-            exit 1
-          }
+          kubectl describe deployment apsas-frontend -n "$K8S_NAMESPACE" || true
+          kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-frontend -o wide || true
+          kubectl describe pods -n "$K8S_NAMESPACE" -l app=apsas-frontend || true
+          kubectl logs -n "$K8S_NAMESPACE" -l app=apsas-frontend --all-containers --tail=300 || true
+          kubectl logs -n "$K8S_NAMESPACE" -l app=apsas-frontend --all-containers --tail=300 --previous || true
+          kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
+
+      - name: "[Deploy:Primary] Fail if frontend rollout failed"
+        if: steps.primary-frontend-rollout.outcome == 'failure'
+        run: exit 1
+
+  deploy-failover:
+    needs: [publish-images, render-manifests, deploy-primary]
+    if: ${{ vars.GKE_FAILOVER_CLUSTER != '' && vars.GKE_FAILOVER_LOCATION != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[Auth] Authenticate to Google Cloud"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: "[Auth] Set up gcloud"
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: "[Auth] Enable GKE auth plugin"
+        run: |
+          echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> "$GITHUB_ENV"
+          gke-gcloud-auth-plugin --version
+
+      - name: "[Deploy:Failover] Download rendered manifests"
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+          path: rendered
 
       - name: "[Deploy:Failover] Get cluster credentials"
-        if: ${{ env.GKE_FAILOVER_CLUSTER != '' && env.GKE_FAILOVER_LOCATION != '' }}
         run: |
           gcloud container clusters get-credentials "$GKE_FAILOVER_CLUSTER" --location "$GKE_FAILOVER_LOCATION" --project "$GCP_PROJECT_ID"
 
       - name: "[Deploy:Failover] Apply manifests"
-        if: ${{ env.GKE_FAILOVER_CLUSTER != '' && env.GKE_FAILOVER_LOCATION != '' }}
         run: |
           kubectl apply --validate=false -f rendered/
 
       - name: "[Deploy:Failover] Rollout backend"
-        if: ${{ env.GKE_FAILOVER_CLUSTER != '' && env.GKE_FAILOVER_LOCATION != '' }}
+        id: failover-backend-rollout
+        continue-on-error: true
+        run: kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=900s
+
+      - name: "[Deploy:Failover] Diagnostics backend"
+        if: steps.failover-backend-rollout.outcome == 'failure'
         run: |
-          kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=900s || {
-            kubectl describe deployment apsas-backend -n "$K8S_NAMESPACE" || true
-            kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o wide || true
-            kubectl describe pods -n "$K8S_NAMESPACE" -l app=apsas-backend || true
-            kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
-            exit 1
-          }
+          kubectl describe deployment apsas-backend -n "$K8S_NAMESPACE" || true
+          kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o wide || true
+          kubectl describe pods -n "$K8S_NAMESPACE" -l app=apsas-backend || true
+          kubectl logs -n "$K8S_NAMESPACE" -l app=apsas-backend --all-containers --tail=300 || true
+          kubectl logs -n "$K8S_NAMESPACE" -l app=apsas-backend --all-containers --tail=300 --previous || true
+          kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
+
+      - name: "[Deploy:Failover] Fail if backend rollout failed"
+        if: steps.failover-backend-rollout.outcome == 'failure'
+        run: exit 1
 
       - name: "[Deploy:Failover] Rollout frontend"
-        if: ${{ env.GKE_FAILOVER_CLUSTER != '' && env.GKE_FAILOVER_LOCATION != '' }}
+        id: failover-frontend-rollout
+        continue-on-error: true
+        run: kubectl rollout status deployment/apsas-frontend -n "$K8S_NAMESPACE" --timeout=900s
+
+      - name: "[Deploy:Failover] Diagnostics frontend"
+        if: steps.failover-frontend-rollout.outcome == 'failure'
         run: |
-          kubectl rollout status deployment/apsas-frontend -n "$K8S_NAMESPACE" --timeout=900s || {
-            kubectl describe deployment apsas-frontend -n "$K8S_NAMESPACE" || true
-            kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-frontend -o wide || true
-            kubectl describe pods -n "$K8S_NAMESPACE" -l app=apsas-frontend || true
-            kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
-            exit 1
-          }
+          kubectl describe deployment apsas-frontend -n "$K8S_NAMESPACE" || true
+          kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-frontend -o wide || true
+          kubectl describe pods -n "$K8S_NAMESPACE" -l app=apsas-frontend || true
+          kubectl logs -n "$K8S_NAMESPACE" -l app=apsas-frontend --all-containers --tail=300 || true
+          kubectl logs -n "$K8S_NAMESPACE" -l app=apsas-frontend --all-containers --tail=300 --previous || true
+          kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
+
+      - name: "[Deploy:Failover] Fail if frontend rollout failed"
+        if: steps.failover-frontend-rollout.outcome == 'failure'
+        run: exit 1
