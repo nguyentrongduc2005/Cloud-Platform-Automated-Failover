@@ -104,26 +104,6 @@ module "multicluster_ingress" {
   create_mci_k8s_resources = var.create_mci_k8s_resources
 }
 
-module "workloads" {
-  source = "../../modules/workloads"
-
-  primary_cluster_endpoint        = module.gke_autopilot.primary_cluster_endpoint
-  primary_cluster_ca_certificate  = module.gke_autopilot.primary_cluster_ca_certificate
-  failover_cluster_endpoint       = module.gke_autopilot.failover_cluster_endpoint
-  failover_cluster_ca_certificate = module.gke_autopilot.failover_cluster_ca_certificate
-  enable_failover_cluster         = var.enable_failover_cluster
-
-  k8s_namespace        = var.k8s_namespace
-  backend_secret_name  = var.backend_secret_name
-  frontend_secret_name = var.frontend_secret_name
-
-  backend_image  = var.backend_image
-  frontend_image = var.frontend_image
-
-  backend_app_name  = var.backend_app_name
-  frontend_app_name = var.frontend_app_name
-}
-
 module "security_and_ci" {
   source = "../../modules/security_and_ci"
 

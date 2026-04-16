@@ -5,6 +5,8 @@ metadata:
   namespace: __NAMESPACE__
   labels:
     app: apsas-backend
+  annotations:
+    cloud.google.com/backend-config: '{"ports":{"80":"apsas-backend-becfg"}}'
 spec:
   type: ClusterIP
   selector:

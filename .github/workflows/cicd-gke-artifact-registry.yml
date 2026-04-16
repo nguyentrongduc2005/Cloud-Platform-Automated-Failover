@@ -241,6 +241,28 @@ jobs:
         if: steps.primary-frontend-rollout.outcome == 'failure'
         run: exit 1
 
+      - name: "[Deploy:Primary] Sync MCI health check path"
+        run: |
+          set +e
+          HC_NAME=$(kubectl get multiclusteringress.networking.gke.io apsas-backend-mci -n "$K8S_NAMESPACE" -o jsonpath='{.status.CloudResources.HealthChecks[0]}' 2>/dev/null)
+
+          if [ -z "$HC_NAME" ]; then
+            echo "MCI health check not found yet, skipping sync."
+            exit 0
+          fi
+
+          echo "Updating health check $HC_NAME to /api/healthz"
+          gcloud compute health-checks update http "$HC_NAME" \
+            --global \
+            --project "$GCP_PROJECT_ID" \
+            --request-path=/api/healthz \
+            --check-interval=10s \
+            --timeout=5s \
+            --healthy-threshold=1 \
+            --unhealthy-threshold=3
+
+          gcloud compute health-checks describe "$HC_NAME" --global --project "$GCP_PROJECT_ID" | grep -E 'requestPath|checkIntervalSec|timeoutSec|healthyThreshold|unhealthyThreshold' || true
+
   deploy-failover:
     needs: [publish-images, render-manifests, deploy-primary]
     if: ${{ vars.GKE_FAILOVER_CLUSTER != '' && vars.GKE_FAILOVER_LOCATION != '' }}

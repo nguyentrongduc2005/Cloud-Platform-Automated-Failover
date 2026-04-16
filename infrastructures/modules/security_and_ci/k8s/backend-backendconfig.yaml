@@ -1,0 +1,17 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: apsas-backend-becfg
+  namespace: __NAMESPACE__
+spec:
+  timeoutSec: 30
+  connectionDraining:
+    drainingTimeoutSec: 20
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    requestPath: /api/healthz
+    port: 8080
+    type: HTTP

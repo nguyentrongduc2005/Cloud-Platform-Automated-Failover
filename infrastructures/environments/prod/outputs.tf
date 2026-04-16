@@ -83,14 +83,6 @@ output "mci_status" {
   value = module.multicluster_ingress.mci_status
 }
 
-output "backend_service_name" {
-  value = module.workloads.backend_service_name
-}
-
-output "frontend_service_name" {
-  value = module.workloads.frontend_service_name
-}
-
 output "artifact_registry_repository" {
   value = module.security_and_ci.artifact_registry_repository
 }
