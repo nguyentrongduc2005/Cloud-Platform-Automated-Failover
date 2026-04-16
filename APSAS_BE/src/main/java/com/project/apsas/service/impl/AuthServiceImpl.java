@@ -133,9 +133,6 @@ public class AuthServiceImpl implements AuthService {
 
         // Tạo OTP
         String code = genOtp6();
-        String otpkey = "otp:" + email;
-        redisService.set(otpkey, code);
-        redisService.setTimeToLive(otpkey, VERIFY_TTL_MINUTES * 60);
 
         LocalDateTime expiresAt = LocalDateTime.ofInstant(
                 Instant.now().plus(VERIFY_TTL_MINUTES, ChronoUnit.MINUTES),
@@ -155,6 +152,9 @@ public class AuthServiceImpl implements AuthService {
 
         // Save user (sẽ tự động save otp nếu có cascade)
         userRepository.save(user);
+
+        // Redis down không được làm fail đăng ký; DB otp vẫn là nguồn xác thực chính.
+        cacheOtpBestEffort(email, code, VERIFY_TTL_MINUTES);
 
 
         Progress progress = Progress.builder()
@@ -182,25 +182,38 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void verify(VerifyRequest request) {
 
-        User user = userRepository.findByEmail(request.getEmail())
+        final String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        final String inputCode = request.getCode() == null ? "" : request.getCode().trim();
+
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_ESIXSTED));
 
-        String otpKey = "OTP:" + request.getEmail();
-        Object storedOtp = redisService.Get(otpKey);
-        if (storedOtp == null || !storedOtp.equals(request.getCode())) {
+        Otp userOtp = user.getOtp();
+        if (userOtp == null || userOtp.getExpiresAt() == null || userOtp.getExpiresAt().isBefore(LocalDateTime.now())) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
+        // Nếu Redis đang hoạt động và có key thì kiểm tra nhanh qua cache.
+        // Nếu Redis lỗi/mất key thì fallback sang OTP trong DB.
+        try {
+            Object storedOtp = redisService.Get(otpKey(email));
+            if (storedOtp != null && !String.valueOf(storedOtp).equals(inputCode)) {
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
+        } catch (AppException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("Redis unavailable while verifying OTP for {}. Fallback to DB OTP.", email);
+        }
 
-        String userCode = user.getOtp().getCode();
-        if(!(user.getStatus().equals(UserStatus.INACTIVE)
-                && request.getCode().equals(userCode))) {
+        if (!(user.getStatus().equals(UserStatus.INACTIVE)
+                && inputCode.equals(userOtp.getCode()))) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
         user.setStatus(UserStatus.ACTIVE);
         userRepository.save(user);
 
-        redisService.delete(otpKey);
+        deleteOtpCacheBestEffort(email);
     }
 
     // ================= LOGIN =================
@@ -253,13 +266,13 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_ESIXSTED));
 
         String code = genOtp6();
-        String otpKey = "OTP:" + email;
-        redisService.set(otpKey, code);
-        redisService.setTimeToLive(otpKey, VERIFY_TTL_MINUTES * 60);
         LocalDateTime expiresAt = LocalDateTime.ofInstant(Instant.now().plus(VERIFY_TTL_MINUTES, ChronoUnit.MINUTES),
                 ZoneId.systemDefault());
         user.getOtp().setCode(code);
+        user.getOtp().setExpiresAt(expiresAt);
         userRepository.save(user);
+
+        cacheOtpBestEffort(email, code, VERIFY_TTL_MINUTES);
 
         sendOtpMail(email, user.getName(), code, VERIFY_TTL_MINUTES);
     }
@@ -281,6 +294,29 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         mailProducer.push(TOPIC_MAIL, event.getToEmail(), event);
     }
+
+    private String otpKey(String email) {
+        return "otp:" + email;
+    }
+
+    private void cacheOtpBestEffort(String email, String code, int ttlMinutes) {
+        try {
+            String key = otpKey(email);
+            redisService.set(key, code);
+            redisService.setTimeToLive(key, ttlMinutes * 60L);
+        } catch (Exception ex) {
+            log.warn("Redis unavailable while caching OTP for {}. Continue with DB OTP.", email);
+        }
+    }
+
+    private void deleteOtpCacheBestEffort(String email) {
+        try {
+            redisService.delete(otpKey(email));
+        } catch (Exception ex) {
+            log.warn("Redis unavailable while deleting OTP cache for {}.", email);
+        }
+    }
+
     private String generateRefreshToken() {
         return UUID.randomUUID().toString().replace("-", "");
     }
