@@ -30,6 +30,18 @@ module "database" {
   db_password = var.db_password
 }
 
+locals {
+  backend_env_vars_primary = merge(
+    var.backend_env_vars_primary,
+    var.kafka_bootstrap_servers_primary != "" ? { KAFKA = var.kafka_bootstrap_servers_primary } : {}
+  )
+
+  backend_env_vars_failover = merge(
+    var.backend_env_vars_failover,
+    var.kafka_bootstrap_servers_failover != "" ? { KAFKA = var.kafka_bootstrap_servers_failover } : {}
+  )
+}
+
 module "gke_autopilot" {
   source = "../../modules/gke_autopilot"
 
@@ -45,12 +57,14 @@ module "gke_autopilot" {
   release_channel             = var.gke_release_channel
   enable_failover_cluster     = var.enable_failover_cluster
 
-  k8s_namespace        = var.k8s_namespace
-  create_namespace     = var.create_k8s_namespace
-  backend_secret_name  = var.backend_secret_name
-  frontend_secret_name = var.frontend_secret_name
-  backend_env_vars     = var.backend_env_vars
-  frontend_env_vars    = var.frontend_env_vars
+  k8s_namespace              = var.k8s_namespace
+  create_namespace           = var.create_k8s_namespace
+  backend_secret_name        = var.backend_secret_name
+  frontend_secret_name       = var.frontend_secret_name
+  backend_env_vars_primary   = local.backend_env_vars_primary
+  backend_env_vars_failover  = local.backend_env_vars_failover
+  frontend_env_vars_primary  = var.frontend_env_vars_primary
+  frontend_env_vars_failover = var.frontend_env_vars_failover
 }
 
 module "kafka" {

@@ -100,6 +100,18 @@ variable "kafka_memory_bytes" {
   default     = 3221225472
 }
 
+variable "kafka_bootstrap_servers_primary" {
+  description = "Kafka bootstrap servers cho backend primary (ví dụ host1:9092,host2:9092)"
+  type        = string
+  default     = ""
+}
+
+variable "kafka_bootstrap_servers_failover" {
+  description = "Kafka bootstrap servers cho backend failover (ví dụ host1:9092,host2:9092)"
+  type        = string
+  default     = ""
+}
+
 variable "enable_failover_cluster" {
   description = "Bật/tắt tạo cluster GKE failover để tiết kiệm quota"
   type        = bool
@@ -130,15 +142,29 @@ variable "frontend_secret_name" {
   default     = "frontend-env-secret"
 }
 
-variable "backend_env_vars" {
-  description = "Biến môi trường backend sẽ lưu vào Secret"
+variable "backend_env_vars_primary" {
+  description = "Biến môi trường backend cho primary cluster"
   type        = map(string)
   default     = {}
   sensitive   = true
 }
 
-variable "frontend_env_vars" {
-  description = "Biến môi trường frontend sẽ lưu vào Secret"
+variable "backend_env_vars_failover" {
+  description = "Biến môi trường backend cho failover cluster"
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+}
+
+variable "frontend_env_vars_primary" {
+  description = "Biến môi trường frontend cho primary cluster"
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+}
+
+variable "frontend_env_vars_failover" {
+  description = "Biến môi trường frontend cho failover cluster"
   type        = map(string)
   default     = {}
   sensitive   = true
