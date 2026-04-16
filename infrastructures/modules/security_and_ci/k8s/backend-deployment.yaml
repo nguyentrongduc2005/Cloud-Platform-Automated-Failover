@@ -8,6 +8,11 @@ metadata:
 spec:
   replicas: 1
   progressDeadlineSeconds: 1800
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: apsas-backend
@@ -16,6 +21,7 @@ spec:
       labels:
         app: apsas-backend
     spec:
+      terminationGracePeriodSeconds: 20
       containers:
         - name: apsas-backend
           image: __BACKEND_IMAGE__
@@ -26,6 +32,10 @@ spec:
           envFrom:
             - secretRef:
                 name: __BACKEND_SECRET__
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
           startupProbe:
             httpGet:
               path: /api/healthz

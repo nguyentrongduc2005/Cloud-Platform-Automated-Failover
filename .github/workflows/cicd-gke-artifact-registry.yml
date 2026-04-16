@@ -179,7 +179,24 @@ jobs:
       - name: "[Deploy:Primary] Rollout backend"
         id: primary-backend-rollout
         continue-on-error: true
-        run: kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=900s
+        run: |
+          set +e
+          kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=600s
+          status=$?
+
+          if [ $status -ne 0 ]; then
+            echo "Primary backend rollout timed out. Cleaning up terminating pods then retrying..."
+            terminating_pods=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o jsonpath='{range .items[?(@.metadata.deletionTimestamp)]}{.metadata.name}{"\n"}{end}')
+
+            if [ -n "$terminating_pods" ]; then
+              echo "$terminating_pods" | while IFS= read -r pod; do
+                [ -z "$pod" ] && continue
+                kubectl delete pod "$pod" -n "$K8S_NAMESPACE" --grace-period=0 --force || true
+              done
+            fi
+
+            kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=300s
+          fi
 
       - name: "[Deploy:Primary] Diagnostics backend"
         if: steps.primary-backend-rollout.outcome == 'failure'
@@ -252,7 +269,24 @@ jobs:
       - name: "[Deploy:Failover] Rollout backend"
         id: failover-backend-rollout
         continue-on-error: true
-        run: kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=900s
+        run: |
+          set +e
+          kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=600s
+          status=$?
+
+          if [ $status -ne 0 ]; then
+            echo "Failover backend rollout timed out. Cleaning up terminating pods then retrying..."
+            terminating_pods=$(kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o jsonpath='{range .items[?(@.metadata.deletionTimestamp)]}{.metadata.name}{"\n"}{end}')
+
+            if [ -n "$terminating_pods" ]; then
+              echo "$terminating_pods" | while IFS= read -r pod; do
+                [ -z "$pod" ] && continue
+                kubectl delete pod "$pod" -n "$K8S_NAMESPACE" --grace-period=0 --force || true
+              done
+            fi
+
+            kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=300s
+          fi
 
       - name: "[Deploy:Failover] Diagnostics backend"
         if: steps.failover-backend-rollout.outcome == 'failure'
