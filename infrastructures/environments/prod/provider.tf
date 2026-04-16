@@ -4,11 +4,21 @@ terraform {
       source  = "hashicorp/google"
       version = "7.25.0"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "7.25.0"
+    }
   }
 }
 
 # Provider mặc định (sẽ dùng primary_region)
 provider "google" {
+  project     = var.project_id
+  region      = var.primary_region
+  credentials = file("terraform-admin-key.json")
+}
+
+provider "google-beta" {
   project     = var.project_id
   region      = var.primary_region
   credentials = file("terraform-admin-key.json")

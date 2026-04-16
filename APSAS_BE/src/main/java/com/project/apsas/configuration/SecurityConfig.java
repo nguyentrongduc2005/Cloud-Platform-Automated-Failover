@@ -39,6 +39,7 @@ public class SecurityConfig {
         };
 
         private final String[] PUBLIC_ENDPOINTS_GET = {
+                        "/healthz",
                         "/courses",
                         "/courses/{courseId}/register-details"
         };

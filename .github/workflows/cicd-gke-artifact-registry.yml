@@ -1,0 +1,123 @@
+name: Build Push Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  BACKEND_IMAGE_NAME: apsas-backend
+  FRONTEND_IMAGE_NAME: apsas-frontend
+  GKE_PRIMARY_CLUSTER: ${{ vars.GKE_PRIMARY_CLUSTER }}
+  GKE_PRIMARY_LOCATION: ${{ vars.GKE_PRIMARY_LOCATION }}
+  GKE_FAILOVER_CLUSTER: ${{ vars.GKE_FAILOVER_CLUSTER }}
+  GKE_FAILOVER_LOCATION: ${{ vars.GKE_FAILOVER_LOCATION }}
+  K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
+  BACKEND_SECRET_NAME: ${{ vars.BACKEND_SECRET_NAME }}
+  FRONTEND_SECRET_NAME: ${{ vars.FRONTEND_SECRET_NAME }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build backend JAR
+        run: mvn -B -DskipTests package -f APSAS_BE/pom.xml
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: APSAS_FE/package-lock.json
+
+      - name: Build frontend bundle
+        run: |
+          cd APSAS_FE
+          npm ci
+          npm run build
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: APSAS_BE/target/*.jar
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: APSAS_FE/dist
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev --quiet
+
+      - name: Build and push backend image
+        id: backend-image
+        run: |
+          BACKEND_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${BACKEND_IMAGE_NAME}:${GITHUB_SHA}"
+          docker build -t "$BACKEND_IMAGE" APSAS_BE
+          docker push "$BACKEND_IMAGE"
+          echo "backend_image=$BACKEND_IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push frontend image
+        id: frontend-image
+        run: |
+          FRONTEND_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}"
+          docker build -t "$FRONTEND_IMAGE" APSAS_FE
+          docker push "$FRONTEND_IMAGE"
+          echo "frontend_image=$FRONTEND_IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Render Kubernetes manifests
+        run: |
+          mkdir -p rendered
+          cp infrastructures/modules/security_and_ci/k8s/*.yaml rendered/
+
+          for f in rendered/*.yaml; do
+            sed -i "s|__NAMESPACE__|${K8S_NAMESPACE}|g" "$f"
+            sed -i "s|__BACKEND_SECRET__|${BACKEND_SECRET_NAME}|g" "$f"
+            sed -i "s|__FRONTEND_SECRET__|${FRONTEND_SECRET_NAME}|g" "$f"
+            sed -i "s|__BACKEND_IMAGE__|${{ steps.backend-image.outputs.backend_image }}|g" "$f"
+            sed -i "s|__FRONTEND_IMAGE__|${{ steps.frontend-image.outputs.frontend_image }}|g" "$f"
+          done
+
+      - name: Deploy to primary cluster
+        run: |
+          gcloud container clusters get-credentials "$GKE_PRIMARY_CLUSTER" --location "$GKE_PRIMARY_LOCATION" --project "$GCP_PROJECT_ID"
+          kubectl apply -f rendered/
+          kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=300s
+          kubectl rollout status deployment/apsas-frontend -n "$K8S_NAMESPACE" --timeout=300s
+
+      - name: Deploy to failover cluster
+        if: ${{ env.GKE_FAILOVER_CLUSTER != '' && env.GKE_FAILOVER_LOCATION != '' }}
+        run: |
+          gcloud container clusters get-credentials "$GKE_FAILOVER_CLUSTER" --location "$GKE_FAILOVER_LOCATION" --project "$GCP_PROJECT_ID"
+          kubectl apply -f rendered/
+          kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=300s
+          kubectl rollout status deployment/apsas-frontend -n "$K8S_NAMESPACE" --timeout=300s

@@ -29,3 +29,96 @@ module "database" {
   # Lấy mật khẩu từ biến môi trường (Sẽ hướng dẫn truyền vào ở bước dưới)
   db_password = var.db_password
 }
+
+module "gke_autopilot" {
+  source = "../../modules/gke_autopilot"
+
+  project_id               = var.project_id
+  cluster_name_prefix      = var.cluster_name_prefix
+  primary_region           = var.primary_region
+  failover_region          = var.secondary_region
+  network_name             = module.networking.network_name
+  primary_subnetwork_name  = module.networking.primary_subnetwork_name
+  failover_subnetwork_name = module.networking.failover_subnetwork_name
+
+  cluster_deletion_protection = var.cluster_deletion_protection
+  release_channel             = var.gke_release_channel
+  enable_failover_cluster     = var.enable_failover_cluster
+
+  k8s_namespace        = var.k8s_namespace
+  create_namespace     = var.create_k8s_namespace
+  backend_secret_name  = var.backend_secret_name
+  frontend_secret_name = var.frontend_secret_name
+  backend_env_vars     = var.backend_env_vars
+  frontend_env_vars    = var.frontend_env_vars
+}
+
+module "kafka" {
+  source = "../../modules/kafka"
+
+  project_id               = var.project_id
+  name_prefix              = var.kafka_name_prefix
+  primary_region           = var.primary_region
+  failover_region          = var.secondary_region
+  primary_subnetwork_name  = module.networking.primary_subnetwork_name
+  failover_subnetwork_name = module.networking.failover_subnetwork_name
+  kafka_vcpu_count         = var.kafka_vcpu_count
+  kafka_memory_bytes       = var.kafka_memory_bytes
+}
+
+module "multicluster_ingress" {
+  source = "../../modules/multicluster_ingress"
+
+  project_id                     = var.project_id
+  membership_name_prefix         = var.mci_membership_name_prefix
+  primary_cluster_name           = module.gke_autopilot.primary_cluster_name
+  primary_cluster_location       = module.gke_autopilot.primary_cluster_location
+  primary_cluster_endpoint       = module.gke_autopilot.primary_cluster_endpoint
+  primary_cluster_ca_certificate = module.gke_autopilot.primary_cluster_ca_certificate
+
+  failover_cluster_name     = module.gke_autopilot.failover_cluster_name
+  failover_cluster_location = module.gke_autopilot.failover_cluster_location
+  enable_failover_cluster   = var.enable_failover_cluster
+
+  k8s_namespace            = var.k8s_namespace
+  mci_service_name         = var.mci_service_name
+  mci_ingress_name         = var.mci_ingress_name
+  mci_backend_label_key    = var.mci_backend_label_key
+  mci_backend_label_value  = var.mci_backend_label_value
+  mci_service_port         = var.mci_service_port
+  mci_target_port          = var.mci_target_port
+  create_mci_k8s_resources = var.create_mci_k8s_resources
+}
+
+module "workloads" {
+  source = "../../modules/workloads"
+
+  primary_cluster_endpoint        = module.gke_autopilot.primary_cluster_endpoint
+  primary_cluster_ca_certificate  = module.gke_autopilot.primary_cluster_ca_certificate
+  failover_cluster_endpoint       = module.gke_autopilot.failover_cluster_endpoint
+  failover_cluster_ca_certificate = module.gke_autopilot.failover_cluster_ca_certificate
+  enable_failover_cluster         = var.enable_failover_cluster
+
+  k8s_namespace        = var.k8s_namespace
+  backend_secret_name  = var.backend_secret_name
+  frontend_secret_name = var.frontend_secret_name
+
+  backend_image  = var.backend_image
+  frontend_image = var.frontend_image
+
+  backend_app_name  = var.backend_app_name
+  frontend_app_name = var.frontend_app_name
+}
+
+module "security_and_ci" {
+  source = "../../modules/security_and_ci"
+
+  project_id                    = var.project_id
+  region                        = var.primary_region
+  artifact_registry_repo_id     = var.artifact_registry_repo_id
+  github_repository             = var.github_repository
+  github_branch                 = var.github_branch
+  workload_identity_pool_id     = var.workload_identity_pool_id
+  workload_identity_provider_id = var.workload_identity_provider_id
+  cicd_service_account_id       = var.cicd_service_account_id
+}
