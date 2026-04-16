@@ -88,7 +88,7 @@ resource "kubernetes_namespace_v1" "failover_app" {
 
 resource "kubernetes_secret_v1" "backend_env_primary" {
   provider = kubernetes.primary
-  count    = length(var.backend_env_vars) > 0 ? 1 : 0
+  count    = length(var.backend_env_vars_primary) > 0 ? 1 : 0
 
   metadata {
     name      = var.backend_secret_name
@@ -96,7 +96,7 @@ resource "kubernetes_secret_v1" "backend_env_primary" {
   }
 
   type = "Opaque"
-  data = var.backend_env_vars
+  data = var.backend_env_vars_primary
 
   depends_on = [
     google_container_cluster.primary,
@@ -106,7 +106,7 @@ resource "kubernetes_secret_v1" "backend_env_primary" {
 
 resource "kubernetes_secret_v1" "frontend_env_primary" {
   provider = kubernetes.primary
-  count    = length(var.frontend_env_vars) > 0 ? 1 : 0
+  count    = length(var.frontend_env_vars_primary) > 0 ? 1 : 0
 
   metadata {
     name      = var.frontend_secret_name
@@ -114,7 +114,7 @@ resource "kubernetes_secret_v1" "frontend_env_primary" {
   }
 
   type = "Opaque"
-  data = var.frontend_env_vars
+  data = var.frontend_env_vars_primary
 
   depends_on = [
     google_container_cluster.primary,
@@ -124,7 +124,7 @@ resource "kubernetes_secret_v1" "frontend_env_primary" {
 
 resource "kubernetes_secret_v1" "backend_env_failover" {
   provider = kubernetes.failover
-  count    = var.enable_failover_cluster && length(var.backend_env_vars) > 0 ? 1 : 0
+  count    = var.enable_failover_cluster && length(var.backend_env_vars_failover) > 0 ? 1 : 0
 
   metadata {
     name      = var.backend_secret_name
@@ -132,7 +132,7 @@ resource "kubernetes_secret_v1" "backend_env_failover" {
   }
 
   type = "Opaque"
-  data = var.backend_env_vars
+  data = var.backend_env_vars_failover
 
   depends_on = [
     google_container_cluster.failover,
@@ -142,7 +142,7 @@ resource "kubernetes_secret_v1" "backend_env_failover" {
 
 resource "kubernetes_secret_v1" "frontend_env_failover" {
   provider = kubernetes.failover
-  count    = var.enable_failover_cluster && length(var.frontend_env_vars) > 0 ? 1 : 0
+  count    = var.enable_failover_cluster && length(var.frontend_env_vars_failover) > 0 ? 1 : 0
 
   metadata {
     name      = var.frontend_secret_name
@@ -150,7 +150,7 @@ resource "kubernetes_secret_v1" "frontend_env_failover" {
   }
 
   type = "Opaque"
-  data = var.frontend_env_vars
+  data = var.frontend_env_vars_failover
 
   depends_on = [
     google_container_cluster.failover,

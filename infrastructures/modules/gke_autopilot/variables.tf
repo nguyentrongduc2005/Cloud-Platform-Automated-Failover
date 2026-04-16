@@ -104,15 +104,29 @@ variable "frontend_secret_name" {
   default     = "frontend-env-secret"
 }
 
-variable "backend_env_vars" {
-  description = "Map biến môi trường backend lưu vào Kubernetes Secret"
+variable "backend_env_vars_primary" {
+  description = "Map biến môi trường backend cho primary cluster"
   type        = map(string)
   default     = {}
   sensitive   = true
 }
 
-variable "frontend_env_vars" {
-  description = "Map biến môi trường frontend lưu vào Kubernetes Secret"
+variable "backend_env_vars_failover" {
+  description = "Map biến môi trường backend cho failover cluster"
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+}
+
+variable "frontend_env_vars_primary" {
+  description = "Map biến môi trường frontend cho primary cluster"
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+}
+
+variable "frontend_env_vars_failover" {
+  description = "Map biến môi trường frontend cho failover cluster"
   type        = map(string)
   default     = {}
   sensitive   = true
