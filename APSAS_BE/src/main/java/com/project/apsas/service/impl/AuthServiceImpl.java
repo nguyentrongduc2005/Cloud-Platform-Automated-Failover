@@ -38,6 +38,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
@@ -65,6 +66,7 @@ public class AuthServiceImpl implements AuthService {
     UserMapper mapper;
     KafkaMailProducer mailProducer;
     RefreshTokenRepository refreshTokenRepository;
+    JdbcTemplate jdbcTemplate;
 
     BasicRedisServiceImpl redisService;
     @NonFinal
@@ -236,17 +238,23 @@ public class AuthServiceImpl implements AuthService {
                 ZoneId.systemDefault());
         // Trả về theo mapper hiện có của bạn
         LoginResponse res = mapper.toLoginResponse(user);
-        if (Objects.isNull(user.getRefreshToken())) {
-            RefreshToken refreshToken = RefreshToken.builder()
-                    .tokenHash(passwordEncoder.encode(rf))
-                    .expiresAt(expiresAt)
-                    .userId(user.getId())
-                    .build();
-            user.setRefreshToken(refreshToken);
-            userRepository.save(user);
+        if (isDatabaseReadOnly()) {
+            // Failover DB can be super_read_only; skip token persistence to keep login available.
+            log.warn("Database is read-only. Skip refresh token persistence for userId={}", user.getId());
+            rf = null;
         } else {
-            user.getRefreshToken().setTokenHash(passwordEncoder.encode(rf));
-            user.getRefreshToken().setExpiresAt(expiresAt);
+            if (Objects.isNull(user.getRefreshToken())) {
+                RefreshToken refreshToken = RefreshToken.builder()
+                        .tokenHash(passwordEncoder.encode(rf))
+                        .expiresAt(expiresAt)
+                        .userId(user.getId())
+                        .build();
+                user.setRefreshToken(refreshToken);
+                userRepository.save(user);
+            } else {
+                user.getRefreshToken().setTokenHash(passwordEncoder.encode(rf));
+                user.getRefreshToken().setExpiresAt(expiresAt);
+            }
         }
 
         res.setAccessToken(accessToken);
@@ -321,6 +329,15 @@ public class AuthServiceImpl implements AuthService {
 
     private String generateRefreshToken() {
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private boolean isDatabaseReadOnly() {
+        try {
+            Integer ro = jdbcTemplate.queryForObject("SELECT @@global.super_read_only", Integer.class);
+            return ro != null && ro == 1;
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     private String generateAccessToken(User user) {
