@@ -34,11 +34,11 @@ import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
@@ -99,6 +99,10 @@ public class AuthServiceImpl implements AuthService {
     // ================= REGISTER =================
     @Override
     public RegisterResponse register(RegisterRequest req) {
+        if (isDatabaseReadOnly()) {
+            throw new AppException(ErrorCode.SERVICE_UNAVAILABLE);
+        }
+
         final String email = req.getEmail().trim().toLowerCase(Locale.ROOT);
 
         userRepository.findByEmail(email).ifPresent(u -> {
@@ -239,8 +243,7 @@ public class AuthServiceImpl implements AuthService {
         // Trả về theo mapper hiện có của bạn
         LoginResponse res = mapper.toLoginResponse(user);
         if (isDatabaseReadOnly()) {
-            // Failover DB can be super_read_only; skip token persistence to keep login available.
-            log.warn("Database is read-only. Skip refresh token persistence for userId={}", user.getId());
+            // Failover DB can be read-only. Keep login available with access token only.
             rf = null;
         } else {
             if (Objects.isNull(user.getRefreshToken())) {
@@ -266,6 +269,10 @@ public class AuthServiceImpl implements AuthService {
     // ================= RESEND OTP =================
     @Override
     public void resendCode(ResendCodeRequest req) {
+        if (isDatabaseReadOnly()) {
+            throw new AppException(ErrorCode.SERVICE_UNAVAILABLE);
+        }
+
         final String email = req.getEmail().trim().toLowerCase(Locale.ROOT);
 
         User user = userRepository.findByEmail(email)
@@ -329,15 +336,6 @@ public class AuthServiceImpl implements AuthService {
 
     private String generateRefreshToken() {
         return UUID.randomUUID().toString().replace("-", "");
-    }
-
-    private boolean isDatabaseReadOnly() {
-        try {
-            Integer ro = jdbcTemplate.queryForObject("SELECT @@global.super_read_only", Integer.class);
-            return ro != null && ro == 1;
-        } catch (Exception ex) {
-            return false;
-        }
     }
 
     private String generateAccessToken(User user) {
@@ -446,6 +444,10 @@ public class AuthServiceImpl implements AuthService {
     // ================= REFRESH TOKEN =================
     @Override
     public LoginResponse refreshToken(RefreshTokenRequest request) {
+        if (isDatabaseReadOnly()) {
+            throw new AppException(ErrorCode.SERVICE_UNAVAILABLE);
+        }
+
         String refreshTokenValue = request.getRefreshToken();
         Long userId = request.getUserId();
         // Bước 1: Kiểm tra null hoặc empty
@@ -502,6 +504,15 @@ public class AuthServiceImpl implements AuthService {
                     .getSubject();
         } catch (Exception e) {
             throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+    }
+
+    private boolean isDatabaseReadOnly() {
+        try {
+            Integer value = jdbcTemplate.queryForObject("SELECT @@global.super_read_only", Integer.class);
+            return value != null && value == 1;
+        } catch (Exception ex) {
+            return false;
         }
     }
 }
