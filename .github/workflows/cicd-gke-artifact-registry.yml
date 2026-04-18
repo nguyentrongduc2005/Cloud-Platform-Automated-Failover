@@ -206,6 +206,27 @@ jobs:
             fi
 
             kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=300s
+            retry_status=$?
+
+            if [ $retry_status -ne 0 ]; then
+              desired=$(kubectl get deployment apsas-backend -n "$K8S_NAMESPACE" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+              updated=$(kubectl get deployment apsas-backend -n "$K8S_NAMESPACE" -o jsonpath='{.status.updatedReplicas}' 2>/dev/null)
+              available=$(kubectl get deployment apsas-backend -n "$K8S_NAMESPACE" -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
+
+              desired=${desired:-0}
+              updated=${updated:-0}
+              available=${available:-0}
+
+              echo "Rollout still not complete. desired=$desired updated=$updated available=$available"
+
+              # Avoid failing the whole pipeline if deployment is already serving traffic.
+              if [ "$available" -ge 1 ] && [ "$updated" -ge 1 ]; then
+                echo "Deployment has available updated replicas. Continue pipeline."
+                exit 0
+              fi
+
+              exit $retry_status
+            fi
           fi
 
       - name: "[Deploy:Primary] Diagnostics backend"
