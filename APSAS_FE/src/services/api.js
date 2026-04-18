@@ -5,7 +5,14 @@ import axios from "axios";
 // DYNAMIC BASE URL HELPER (Clean Code)
 // ==============================
 const getBaseUrl = () => {
-  return window.__ENV__?.VITE_API_BASE || import.meta.env.VITE_API_BASE || "http://localhost:8080/api";
+  const runtimeBase = window.__ENV__?.VITE_API_BASE?.trim();
+  const buildBase = import.meta.env.VITE_API_BASE?.trim();
+
+  if (runtimeBase) return runtimeBase;
+  if (buildBase) return buildBase;
+
+  // Default to same-origin API through nginx/ingress to avoid CORS and mixed-content issues.
+  return "/api";
 };
 
 // ==============================

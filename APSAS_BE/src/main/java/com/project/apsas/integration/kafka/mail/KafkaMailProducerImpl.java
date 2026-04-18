@@ -14,11 +14,15 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class KafkaMailProducerImpl implements KafkaMailProducer {
     KafkaTemplate<String, Object> kafkaTemplate;
+
     @Override
     public void push(String topic, String key, SendMailEvent event) {
         kafkaTemplate.send(topic, key, event)
                 .whenComplete((res, e) -> {
-                    if (e != null) throw new RuntimeException(e);
+                    if (e != null) {
+                        log.error("Failed to send mail event to topic={} key={}", topic, key, e);
+                        return;
+                    }
 
                     var md = res.getRecordMetadata();
                     log.info("✅ Sent {}-{}@{} key={}", md.topic(), md.partition(), md.offset(), key);

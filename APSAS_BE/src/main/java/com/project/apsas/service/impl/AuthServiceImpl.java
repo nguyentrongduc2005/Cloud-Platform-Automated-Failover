@@ -64,7 +64,7 @@ public class AuthServiceImpl implements AuthService {
     PasswordEncoder passwordEncoder;
     UserMapper mapper;
     KafkaMailProducer mailProducer;
-    RefreshTokenRepository  refreshTokenRepository;
+    RefreshTokenRepository refreshTokenRepository;
 
     BasicRedisServiceImpl redisService;
     @NonFinal
@@ -103,11 +103,12 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.USER_ESIXSTED);
         });
         String roleName = "";
-        if(req.getRole() == 1)  roleName = com.project.apsas.enums.Role.STUDENT.name();
-        if(req.getRole() == 2)  roleName = com.project.apsas.enums.Role.LECTURER.name();
+        if (req.getRole() == 1)
+            roleName = com.project.apsas.enums.Role.STUDENT.name();
+        if (req.getRole() == 2)
+            roleName = com.project.apsas.enums.Role.LECTURER.name();
 
-        Role role = roleRepository.findByName(roleName).orElseThrow(() ->
-                new AppException(ErrorCode.BAD_REQUEST));
+        Role role = roleRepository.findByName(roleName).orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
 
         String hashed = passwordEncoder.encode(req.getPassword());
 
@@ -118,8 +119,7 @@ public class AuthServiceImpl implements AuthService {
         user.setRoles(Set.of(role));
         user.setStatus(UserStatus.INACTIVE);
 
-
-        Profile  profile = Profile.builder()
+        Profile profile = Profile.builder()
                 .dob(null)
                 .phone(null)
                 .bio(null)
@@ -130,16 +130,12 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         user.setProfile(profile);
 
-
         // Tạo OTP
         String code = genOtp6();
 
         LocalDateTime expiresAt = LocalDateTime.ofInstant(
                 Instant.now().plus(VERIFY_TTL_MINUTES, ChronoUnit.MINUTES),
-                ZoneId.systemDefault()
-        );
-
-
+                ZoneId.systemDefault());
 
         Otp otp = Otp.builder()
                 .code(code)
@@ -148,14 +144,13 @@ public class AuthServiceImpl implements AuthService {
                 .user(user)
                 .build();
 
-        user.setOtp(otp);  // Set otp cho user
+        user.setOtp(otp); // Set otp cho user
 
         // Save user (sẽ tự động save otp nếu có cascade)
         userRepository.save(user);
 
         // Redis down không được làm fail đăng ký; DB otp vẫn là nguồn xác thực chính.
         cacheOtpBestEffort(email, code, VERIFY_TTL_MINUTES);
-
 
         Progress progress = Progress.builder()
                 .userId(user.getId())
@@ -165,17 +160,20 @@ public class AuthServiceImpl implements AuthService {
 
         progressRepository.save(progress);
 
-
-
-        sendOtpMail(email, user.getName(), code, VERIFY_TTL_MINUTES);
+        try {
+            sendOtpMail(email, user.getName(), code, VERIFY_TTL_MINUTES);
+        } catch (Exception ex) {
+            // Do not fail registration if external mail infrastructure is temporarily
+            // unavailable.
+            log.error("Failed to enqueue verification email for {}. User remains registered with DB OTP.", email, ex);
+        }
 
         return RegisterResponse.builder()
                 .email(user.getEmail())
                 .id(user.getId())
                 .role(user.getRoles().stream()
                         .map(Role::getName)
-                        .collect(Collectors.joining(", "))
-                )
+                        .collect(Collectors.joining(", ")))
                 .build();
     }
 
@@ -235,10 +233,10 @@ public class AuthServiceImpl implements AuthService {
         String accessToken = generateAccessToken(user);
         String rf = generateRefreshToken();
         LocalDateTime expiresAt = LocalDateTime.ofInstant(Instant.now().plus(refreshTtlMinutes, ChronoUnit.MINUTES),
-                ZoneId.systemDefault()) ;
+                ZoneId.systemDefault());
         // Trả về theo mapper hiện có của bạn
         LoginResponse res = mapper.toLoginResponse(user);
-        if(Objects.isNull(user.getRefreshToken())) {
+        if (Objects.isNull(user.getRefreshToken())) {
             RefreshToken refreshToken = RefreshToken.builder()
                     .tokenHash(passwordEncoder.encode(rf))
                     .expiresAt(expiresAt)
@@ -274,7 +272,11 @@ public class AuthServiceImpl implements AuthService {
 
         cacheOtpBestEffort(email, code, VERIFY_TTL_MINUTES);
 
-        sendOtpMail(email, user.getName(), code, VERIFY_TTL_MINUTES);
+        try {
+            sendOtpMail(email, user.getName(), code, VERIFY_TTL_MINUTES);
+        } catch (Exception ex) {
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
+        }
     }
 
     // ================= Helpers =================
@@ -339,8 +341,7 @@ public class AuthServiceImpl implements AuthService {
 
             SignedJWT signedJWT = new SignedJWT(
                     new com.nimbusds.jose.JWSHeader(JWSAlgorithm.HS512),
-                    claims
-            );
+                    claims);
             signedJWT.sign(signer);
             return signedJWT.serialize();
         } catch (JOSEException e) {
@@ -394,11 +395,11 @@ public class AuthServiceImpl implements AuthService {
         // Xác định thời gian hết hạn
         Date expiryTime = (isRefresh)
                 ? new Date(signedJWT
-                .getJWTClaimsSet()
-                .getIssueTime()
-                .toInstant()
-                .plus(REFRESHABLE_DURATION, ChronoUnit.SECONDS)
-                .toEpochMilli())
+                        .getJWTClaimsSet()
+                        .getIssueTime()
+                        .toInstant()
+                        .plus(REFRESHABLE_DURATION, ChronoUnit.SECONDS)
+                        .toEpochMilli())
                 : signedJWT.getJWTClaimsSet().getExpirationTime();
 
         // Verify signature
@@ -425,56 +426,55 @@ public class AuthServiceImpl implements AuthService {
         return stringJoiner.toString();
     }
 
-//     ================= REFRESH TOKEN =================
-@Override
-public LoginResponse refreshToken(RefreshTokenRequest request) {
-    String refreshTokenValue = request.getRefreshToken();
-    Long userId = request.getUserId();
-    // Bước 1: Kiểm tra null hoặc empty
-    if (refreshTokenValue == null || refreshTokenValue.trim().isEmpty() || userId == null) {
-        throw new AppException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+    // ================= REFRESH TOKEN =================
+    @Override
+    public LoginResponse refreshToken(RefreshTokenRequest request) {
+        String refreshTokenValue = request.getRefreshToken();
+        Long userId = request.getUserId();
+        // Bước 1: Kiểm tra null hoặc empty
+        if (refreshTokenValue == null || refreshTokenValue.trim().isEmpty() || userId == null) {
+            throw new AppException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+        }
+
+        // Bước 3: Tìm refresh token theo userId
+        RefreshToken refreshToken = refreshTokenRepository.findByUserId(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.REFRESH_TOKEN_INVALID));
+
+        // Bước 4: Kiểm tra token trùng khớp (so sánh hash)
+        if (!passwordEncoder.matches(refreshTokenValue, refreshToken.getTokenHash())) {
+            throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
+        }
+
+        // Bước 5: Kiểm tra hết hạn
+        if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
+        }
+
+        // Bước 6: Lấy user
+        User user = refreshToken.getUser();
+        if (user == null || user.getStatus() != UserStatus.ACTIVE) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        // Bước 7: Sinh token mới
+        String newAccessToken = generateAccessToken(user);
+        String newRefreshToken = generateRefreshToken(); // random string mới
+
+        // Bước 8: Cập nhật refresh token trong DB
+        LocalDateTime expiresAt = LocalDateTime.ofInstant(
+                Instant.now().plus(refreshTtlMinutes, ChronoUnit.MINUTES),
+                ZoneId.systemDefault());
+
+        refreshToken.setTokenHash(passwordEncoder.encode(newRefreshToken));
+        refreshToken.setExpiresAt(expiresAt);
+        refreshTokenRepository.save(refreshToken);
+
+        // Bước 9: Trả response
+        LoginResponse res = mapper.toLoginResponse(user);
+        res.setAccessToken(newAccessToken);
+        res.setRefreshToken(newRefreshToken);
+        return res;
     }
-
-    // Bước 3: Tìm refresh token theo userId
-    RefreshToken refreshToken = refreshTokenRepository.findByUserId(userId)
-            .orElseThrow(() -> new AppException(ErrorCode.REFRESH_TOKEN_INVALID));
-
-    // Bước 4: Kiểm tra token trùng khớp (so sánh hash)
-    if (!passwordEncoder.matches(refreshTokenValue, refreshToken.getTokenHash())) {
-        throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
-    }
-
-    // Bước 5: Kiểm tra hết hạn
-    if (refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-        throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
-    }
-
-    // Bước 6: Lấy user
-    User user = refreshToken.getUser();
-    if (user == null || user.getStatus() != UserStatus.ACTIVE) {
-        throw new AppException(ErrorCode.USER_NOT_FOUND);
-    }
-
-    // Bước 7: Sinh token mới
-    String newAccessToken = generateAccessToken(user);
-    String newRefreshToken = generateRefreshToken(); // random string mới
-
-    // Bước 8: Cập nhật refresh token trong DB
-    LocalDateTime expiresAt = LocalDateTime.ofInstant(
-            Instant.now().plus(refreshTtlMinutes, ChronoUnit.MINUTES),
-            ZoneId.systemDefault()
-    );
-
-    refreshToken.setTokenHash(passwordEncoder.encode(newRefreshToken));
-    refreshToken.setExpiresAt(expiresAt);
-    refreshTokenRepository.save(refreshToken);
-
-    // Bước 9: Trả response
-    LoginResponse res = mapper.toLoginResponse(user);
-    res.setAccessToken(newAccessToken);
-    res.setRefreshToken(newRefreshToken);
-    return res;
-}
 
     @Override
     public String currentId() {

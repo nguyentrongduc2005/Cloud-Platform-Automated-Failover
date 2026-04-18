@@ -20,6 +20,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 @Configuration
 @EnableWebSecurity
@@ -27,6 +29,9 @@ import java.util.List;
 public class SecurityConfig {
         @Value("${jwt.signerKey}")
         private String signerKey;
+
+        @Value("${spring.frontend.url:}")
+        private String frontendUrl;
 
         private final String[] PUBLIC_ENDPOINTS = {
                         "/auth/register",
@@ -75,13 +80,25 @@ public class SecurityConfig {
         @Bean
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration config = new CorsConfiguration();
-                // Origin FE
-                config.setAllowedOriginPatterns(List.of(
-                                "http://localhost",
-                                "http://localhost:*",
-                                "http://127.0.0.1",
-                                "http://127.0.0.1:*",
-                                "https://*.vercel.app"));
+                List<String> dynamicOrigins = Stream.of(frontendUrl.split(","))
+                                .map(String::trim)
+                                .filter(s -> !s.isEmpty())
+                                .toList();
+
+                config.setAllowedOriginPatterns(Stream.of(
+                                List.of(
+                                                "http://localhost",
+                                                "http://localhost:*",
+                                                "http://127.0.0.1",
+                                                "http://127.0.0.1:*",
+                                                "http://*.nip.io",
+                                                "https://*.nip.io",
+                                                "https://*.vercel.app"),
+                                dynamicOrigins)
+                                .flatMap(List::stream)
+                                .filter(Objects::nonNull)
+                                .distinct()
+                                .toList());
                 // Nếu bạn dùng cookie / Authorization header => cần dòng này
                 config.setAllowCredentials(true);
 
