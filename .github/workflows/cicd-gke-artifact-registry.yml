@@ -5,17 +5,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      force_failover:
-        description: "Force run failover deployment even if primary job succeeds"
-        required: false
-        default: false
-        type: boolean
-      promote_failover_db:
-        description: "Promote failover Cloud SQL replica to writable before failover rollout"
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: read
@@ -34,7 +23,6 @@ env:
   K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
   BACKEND_SECRET_NAME: ${{ vars.BACKEND_SECRET_NAME }}
   FRONTEND_SECRET_NAME: ${{ vars.FRONTEND_SECRET_NAME }}
-  FAILOVER_SQL_INSTANCE: ${{ vars.FAILOVER_SQL_INSTANCE }}
 
 jobs:
   build-artifacts:
@@ -196,8 +184,8 @@ jobs:
 
       - name: "[Deploy:Primary] Rollout backend"
         id: primary-backend-rollout
+        continue-on-error: true
         run: |
-          echo "failed=false" >> "$GITHUB_OUTPUT"
           set +e
           kubectl rollout status deployment/apsas-backend -n "$K8S_NAMESPACE" --timeout=600s
           status=$?
@@ -234,20 +222,15 @@ jobs:
               # Avoid failing the whole pipeline if deployment is already serving traffic.
               if [ "$available" -ge 1 ] && [ "$updated" -ge 1 ]; then
                 echo "Deployment has available updated replicas. Continue pipeline."
-                retry_status=0
+                exit 0
               fi
-              status=$retry_status
+
+              exit $retry_status
             fi
           fi
 
-          if [ $status -ne 0 ]; then
-            echo "failed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-          exit 0
-
       - name: "[Deploy:Primary] Diagnostics backend"
-        if: steps.primary-backend-rollout.outputs.failed == 'true'
+        if: steps.primary-backend-rollout.outcome == 'failure'
         run: |
           kubectl describe deployment apsas-backend -n "$K8S_NAMESPACE" || true
           kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-backend -o wide || true
@@ -257,23 +240,16 @@ jobs:
           kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
 
       - name: "[Deploy:Primary] Fail if backend rollout failed"
-        if: steps.primary-backend-rollout.outputs.failed == 'true'
+        if: steps.primary-backend-rollout.outcome == 'failure'
         run: exit 1
 
       - name: "[Deploy:Primary] Rollout frontend"
         id: primary-frontend-rollout
-        run: |
-          echo "failed=false" >> "$GITHUB_OUTPUT"
-          set +e
-          kubectl rollout status deployment/apsas-frontend -n "$K8S_NAMESPACE" --timeout=900s
-          status=$?
-          if [ $status -ne 0 ]; then
-            echo "failed=true" >> "$GITHUB_OUTPUT"
-          fi
-          exit 0
+        continue-on-error: true
+        run: kubectl rollout status deployment/apsas-frontend -n "$K8S_NAMESPACE" --timeout=900s
 
       - name: "[Deploy:Primary] Diagnostics frontend"
-        if: steps.primary-frontend-rollout.outputs.failed == 'true'
+        if: steps.primary-frontend-rollout.outcome == 'failure'
         run: |
           kubectl describe deployment apsas-frontend -n "$K8S_NAMESPACE" || true
           kubectl get pods -n "$K8S_NAMESPACE" -l app=apsas-frontend -o wide || true
@@ -283,7 +259,7 @@ jobs:
           kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp | tail -n 100 || true
 
       - name: "[Deploy:Primary] Fail if frontend rollout failed"
-        if: steps.primary-frontend-rollout.outputs.failed == 'true'
+        if: steps.primary-frontend-rollout.outcome == 'failure'
         run: exit 1
 
       - name: "[Deploy:Primary] Sync MCI health check path"
@@ -310,7 +286,7 @@ jobs:
 
   deploy-failover:
     needs: [publish-images, render-manifests, deploy-primary]
-    if: ${{ always() && vars.GKE_FAILOVER_CLUSTER != '' && vars.GKE_FAILOVER_LOCATION != '' && (needs.deploy-primary.result != 'success' || (github.event_name == 'workflow_dispatch' && inputs.force_failover == true)) }}
+    if: ${{ vars.GKE_FAILOVER_CLUSTER != '' && vars.GKE_FAILOVER_LOCATION != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: "[Auth] Authenticate to Google Cloud"
@@ -328,57 +304,6 @@ jobs:
         run: |
           echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> "$GITHUB_ENV"
           gke-gcloud-auth-plugin --version
-
-      - name: "[Failover] Promote Cloud SQL replica"
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.promote_failover_db == true }}
-        run: |
-          set -euo pipefail
-
-          INSTANCE="${FAILOVER_SQL_INSTANCE:-}"
-          if [ -z "$INSTANCE" ]; then
-            INSTANCE=$(gcloud sql instances list \
-              --project "$GCP_PROJECT_ID" \
-              --filter="region:${GKE_FAILOVER_LOCATION} AND name~'-failover-mysql-replica$'" \
-              --format='value(name)' | head -n 1)
-          fi
-
-          if [ -z "$INSTANCE" ]; then
-            echo "No failover SQL instance found. Set repo variable FAILOVER_SQL_INSTANCE."
-            exit 1
-          fi
-
-          echo "Selected failover SQL instance: $INSTANCE"
-
-          MASTER=$(gcloud sql instances describe "$INSTANCE" \
-            --project "$GCP_PROJECT_ID" \
-            --format='value(masterInstanceName)')
-
-          if [ -z "$MASTER" ]; then
-            echo "Instance is already writable (not a replica)."
-            exit 0
-          fi
-
-          echo "Promoting replica '$INSTANCE' (master: $MASTER) to writable..."
-          OPERATION=$(gcloud sql instances promote-replica "$INSTANCE" \
-            --project "$GCP_PROJECT_ID" \
-            --quiet \
-            --format='value(name)')
-
-          gcloud sql operations wait "$OPERATION" --project "$GCP_PROJECT_ID" --timeout=1800
-
-          STATE=$(gcloud sql instances describe "$INSTANCE" \
-            --project "$GCP_PROJECT_ID" \
-            --format='value(state)')
-          MASTER_AFTER=$(gcloud sql instances describe "$INSTANCE" \
-            --project "$GCP_PROJECT_ID" \
-            --format='value(masterInstanceName)')
-
-          echo "Post-promotion state: state=$STATE masterInstanceName=${MASTER_AFTER:-<empty>}"
-
-          if [ "$STATE" != "RUNNABLE" ] || [ -n "$MASTER_AFTER" ]; then
-            echo "Failover SQL instance is not ready as writable primary."
-            exit 1
-          fi
 
       - name: "[Deploy:Failover] Download rendered manifests"
         uses: actions/download-artifact@v4

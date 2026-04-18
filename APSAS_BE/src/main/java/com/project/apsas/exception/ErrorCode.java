@@ -3,6 +3,7 @@ package com.project.apsas.exception;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
+
 @Getter
 @AllArgsConstructor
 public enum ErrorCode {
@@ -16,9 +17,10 @@ public enum ErrorCode {
     DUPLICATE("E4091", HttpStatus.CONFLICT, "Dữ liệu đã tồn tại."),
     UNSUPPORTED_MEDIA("E4150", HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Content-Type không hỗ trợ."),
     INTERNAL_ERROR("E5000", HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi hệ thống."),
-    SERVICE_UNAVAILABLE("E5030", HttpStatus.SERVICE_UNAVAILABLE, "Hệ thống đang ở chế độ dự phòng chỉ đọc, vui lòng thử lại sau."),
-    ACCESS_DENIED("E5001", HttpStatus.UNAUTHORIZED, "không có quyền truy cập" ),
-    SUBMISSION_NOT_FOUND("E5002",HttpStatus.NOT_FOUND,"không tìm thấy submission"),
+    SERVICE_UNAVAILABLE("E5030", HttpStatus.SERVICE_UNAVAILABLE,
+            "Hệ thống đang ở chế độ dự phòng chỉ đọc, vui lòng thử lại sau."),
+    ACCESS_DENIED("E5001", HttpStatus.UNAUTHORIZED, "không có quyền truy cập"),
+    SUBMISSION_NOT_FOUND("E5002", HttpStatus.NOT_FOUND, "không tìm thấy submission"),
     USER_ESIXSTED("E5003", HttpStatus.BAD_REQUEST, "user đã tồn tại"),
     PASSWORD_INVALID("E5004", HttpStatus.BAD_REQUEST, "password invalid"),
     TOKEN_EXPIRED("E5005", HttpStatus.UNAUTHORIZED, "token hết hạn"),
@@ -46,7 +48,5 @@ public enum ErrorCode {
     private final String code;
     private final HttpStatus status;
     private final String defaultMessage;
-
-
 
 }
