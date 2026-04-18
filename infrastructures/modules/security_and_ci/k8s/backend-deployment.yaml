@@ -32,6 +32,11 @@ spec:
           envFrom:
             - secretRef:
                 name: __BACKEND_SECRET__
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:+UseContainerSupport -XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=65.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+            - name: SPRING_KAFKA_LISTENER_CONCURRENCY
+              value: "1"
           lifecycle:
             preStop:
               exec:
@@ -62,8 +67,8 @@ spec:
             failureThreshold: 6
           resources:
             requests:
-              cpu: 250m
-              memory: 1Gi
-            limits:
               cpu: 500m
               memory: 2Gi
+            limits:
+              cpu: 1500m
+              memory: 4Gi
