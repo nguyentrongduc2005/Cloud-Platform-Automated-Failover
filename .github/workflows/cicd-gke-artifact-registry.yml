@@ -5,6 +5,17 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      force_failover:
+        description: "Force run failover deployment even if primary job succeeds"
+        required: false
+        default: false
+        type: boolean
+      promote_failover_db:
+        description: "Promote failover Cloud SQL replica to writable before failover rollout"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -23,6 +34,7 @@ env:
   K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
   BACKEND_SECRET_NAME: ${{ vars.BACKEND_SECRET_NAME }}
   FRONTEND_SECRET_NAME: ${{ vars.FRONTEND_SECRET_NAME }}
+  FAILOVER_SQL_INSTANCE: ${{ vars.FAILOVER_SQL_INSTANCE }}
 
 jobs:
   build-artifacts:
@@ -286,7 +298,7 @@ jobs:
 
   deploy-failover:
     needs: [publish-images, render-manifests, deploy-primary]
-    if: ${{ vars.GKE_FAILOVER_CLUSTER != '' && vars.GKE_FAILOVER_LOCATION != '' }}
+    if: ${{ always() && vars.GKE_FAILOVER_CLUSTER != '' && vars.GKE_FAILOVER_LOCATION != '' && (needs.deploy-primary.result != 'success' || (github.event_name == 'workflow_dispatch' && inputs.force_failover == true)) }}
     runs-on: ubuntu-latest
     steps:
       - name: "[Auth] Authenticate to Google Cloud"
@@ -304,6 +316,57 @@ jobs:
         run: |
           echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> "$GITHUB_ENV"
           gke-gcloud-auth-plugin --version
+
+      - name: "[Failover] Promote Cloud SQL replica"
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.promote_failover_db == true }}
+        run: |
+          set -euo pipefail
+
+          INSTANCE="${FAILOVER_SQL_INSTANCE:-}"
+          if [ -z "$INSTANCE" ]; then
+            INSTANCE=$(gcloud sql instances list \
+              --project "$GCP_PROJECT_ID" \
+              --filter="region:${GKE_FAILOVER_LOCATION} AND name~'-failover-mysql-replica$'" \
+              --format='value(name)' | head -n 1)
+          fi
+
+          if [ -z "$INSTANCE" ]; then
+            echo "No failover SQL instance found. Set repo variable FAILOVER_SQL_INSTANCE."
+            exit 1
+          fi
+
+          echo "Selected failover SQL instance: $INSTANCE"
+
+          MASTER=$(gcloud sql instances describe "$INSTANCE" \
+            --project "$GCP_PROJECT_ID" \
+            --format='value(masterInstanceName)')
+
+          if [ -z "$MASTER" ]; then
+            echo "Instance is already writable (not a replica)."
+            exit 0
+          fi
+
+          echo "Promoting replica '$INSTANCE' (master: $MASTER) to writable..."
+          OPERATION=$(gcloud sql instances promote-replica "$INSTANCE" \
+            --project "$GCP_PROJECT_ID" \
+            --quiet \
+            --format='value(name)')
+
+          gcloud sql operations wait "$OPERATION" --project "$GCP_PROJECT_ID" --timeout=1800
+
+          STATE=$(gcloud sql instances describe "$INSTANCE" \
+            --project "$GCP_PROJECT_ID" \
+            --format='value(state)')
+          MASTER_AFTER=$(gcloud sql instances describe "$INSTANCE" \
+            --project "$GCP_PROJECT_ID" \
+            --format='value(masterInstanceName)')
+
+          echo "Post-promotion state: state=$STATE masterInstanceName=${MASTER_AFTER:-<empty>}"
+
+          if [ "$STATE" != "RUNNABLE" ] || [ -n "$MASTER_AFTER" ]; then
+            echo "Failover SQL instance is not ready as writable primary."
+            exit 1
+          fi
 
       - name: "[Deploy:Failover] Download rendered manifests"
         uses: actions/download-artifact@v4
