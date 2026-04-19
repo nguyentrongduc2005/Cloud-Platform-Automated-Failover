@@ -156,6 +156,8 @@ app:
   name: CodeVerse
   seed:
     demo-users-source: ${DEMO_USERS_SOURCE:classpath:seed/demo-users.json}
+    bootstrap-sql-enabled: ${APP_SEED_BOOTSTRAP_SQL_ENABLED:true}
+    bootstrap-sql-source: ${BOOTSTRAP_SQL_SOURCE:classpath:seed/bootstrap-data.sql}
   kafka:
     topic:
       verify-email: verify-email

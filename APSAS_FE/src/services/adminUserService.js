@@ -8,14 +8,14 @@ import api from "./api";
 const adminUserService = {
   /**
    * Get paginated list of users
-   * GET /admin/users?page=0&size=10&keyword=&status=&roleId=
+    * GET /admin/users?page=0&size=10&search=&status=&role=
    * Required permission: VIEW_USERS
    * @param {Object} params - Query parameters
    * @param {number} params.page - Page number (0-based)
    * @param {number} params.size - Items per page
-   * @param {string} params.keyword - Search by name/email
+  * @param {string} params.search - Search by name/email
    * @param {string} params.status - Filter: ACTIVE, INACTIVE, BANNED, BLOCKED
-   * @param {number} params.roleId - Filter by role ID
+  * @param {string} params.role - Filter by role name (ADMIN, STUDENT, LECTURER, PROVIDER)
    */
   async getUsers(params = {}) {
     try {
@@ -24,15 +24,13 @@ const adminUserService = {
         size: params.size || 10,
       };
 
-      // API uses 'keyword' for search (not 'search')
-      if (params.keyword) queryParams.keyword = params.keyword;
-      if (params.search) queryParams.keyword = params.search; // backward compatibility
+      if (params.search) queryParams.search = params.search;
+      if (params.keyword) queryParams.search = params.keyword; // backward compatibility
       
       if (params.status) queryParams.status = params.status;
       
-      // API uses 'roleId' (not 'role')
-      if (params.roleId) queryParams.roleId = params.roleId;
-      if (params.role) queryParams.roleId = params.role; // backward compatibility
+      if (params.role) queryParams.role = params.role;
+      if (params.roleId) queryParams.role = params.roleId; // backward compatibility
 
       const response = await api.get("/admin/users", { params: queryParams });
       return response.data;

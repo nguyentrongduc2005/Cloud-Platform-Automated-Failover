@@ -93,7 +93,10 @@ const adminContentService = {
 
   /**
    * Get all tutorials with filters and pagination
-   * Required permission: MANAGE_TUTORIALS
+    * Backend currently exposes:
+    * - /admin/tutorials/pending (PENDING only)
+    * - /tutorials (PUBLISHED only)
+    * Required permission: MANAGE_TUTORIALS for pending/review APIs
    * @param {Object} params - Query parameters
    * @param {number} params.page - Page number (0-based)
    * @param {number} params.size - Page size
@@ -102,25 +105,44 @@ const adminContentService = {
    * @returns {Promise<{code: string, message: string, data: Object}>}
    */
   async getTutorials(params = {}) {
-    try {
-      const queryParams = {
-        page: params.page !== undefined ? params.page : 0,
-        size: params.size || 10,
-      };
-      
-      if (params.status) queryParams.status = params.status;
-      if (params.search) queryParams.search = params.search;
-      
-      const response = await api.get("/admin/tutorials", { params: queryParams });
-      const responseCode = (response.data?.code || "").toUpperCase();
-      if (responseCode === "OK" || responseCode === "200") {
-        return response.data;
-      }
-      throw new Error(response.data?.message || "Failed to fetch tutorials");
-    } catch (error) {
-      console.error("Error fetching tutorials:", error);
-      throw error;
+    const normalizedStatus = String(params.status || "").toLowerCase();
+
+    if (!normalizedStatus || normalizedStatus === "pending") {
+      return this.getPendingTutorials({
+        page: params.page,
+        size: params.size,
+        keyword: params.search || params.keyword,
+      });
     }
+
+    if (normalizedStatus === "approved" || normalizedStatus === "published") {
+      return this.getPublishedTutorials({
+        page: params.page,
+        size: params.size,
+        search: params.search || params.keyword,
+      });
+    }
+
+    if (normalizedStatus === "rejected") {
+      // There is no backend list endpoint for REJECTED tutorials yet.
+      return {
+        code: "ok",
+        message: "Không có endpoint danh sách REJECTED ở backend",
+        data: {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+          number: params.page || 0,
+          size: params.size || 10,
+        },
+      };
+    }
+
+    return this.getPendingTutorials({
+      page: params.page,
+      size: params.size,
+      keyword: params.search || params.keyword,
+    });
   },
 
   /**

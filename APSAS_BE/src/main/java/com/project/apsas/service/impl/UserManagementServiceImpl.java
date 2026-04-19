@@ -29,8 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -41,221 +43,240 @@ import java.util.stream.Collectors;
 @Transactional
 public class UserManagementServiceImpl implements UserManagementService {
 
-    UserRepository userRepository;
-    RoleRepository roleRepository;
-    PasswordEncoder passwordEncoder;
-    ProgressRepository progressRepository;
+        UserRepository userRepository;
+        RoleRepository roleRepository;
+        PasswordEncoder passwordEncoder;
+        ProgressRepository progressRepository;
 
-    @Override
-    public Page<UserManagementResponse> getAllUsers(Pageable pageable, String search, UserStatus status, String role) {
-        Specification<User> spec = (root, query, criteriaBuilder) -> {
-            List<Predicate> predicates = new ArrayList<>();
+        @Override
+        public Page<UserManagementResponse> getAllUsers(Pageable pageable, String search, UserStatus status,
+                        String role) {
+                Specification<User> spec = (root, query, criteriaBuilder) -> {
+                        List<Predicate> predicates = new ArrayList<>();
 
-            // Search by name or email
-            if (search != null && !search.trim().isEmpty()) {
-                String searchPattern = "%" + search.toLowerCase(Locale.ROOT) + "%";
-                Predicate namePredicate = criteriaBuilder.like(
-                        criteriaBuilder.lower(root.get("name")), searchPattern);
-                Predicate emailPredicate = criteriaBuilder.like(
-                        criteriaBuilder.lower(root.get("email")), searchPattern);
-                predicates.add(criteriaBuilder.or(namePredicate, emailPredicate));
-            }
+                        // Search by name or email
+                        if (search != null && !search.trim().isEmpty()) {
+                                String searchPattern = "%" + search.toLowerCase(Locale.ROOT) + "%";
+                                Predicate namePredicate = criteriaBuilder.like(
+                                                criteriaBuilder.lower(root.get("name")), searchPattern);
+                                Predicate emailPredicate = criteriaBuilder.like(
+                                                criteriaBuilder.lower(root.get("email")), searchPattern);
+                                predicates.add(criteriaBuilder.or(namePredicate, emailPredicate));
+                        }
 
-            // Filter by status
-            if (status != null) {
-                predicates.add(criteriaBuilder.equal(root.get("status"), status));
-            }
+                        // Filter by status
+                        if (status != null) {
+                                predicates.add(criteriaBuilder.equal(root.get("status"), status));
+                        }
 
-            // Filter by role
-            if (role != null && !role.trim().isEmpty()) {
-                predicates.add(criteriaBuilder.isMember(
-                        role.toUpperCase(Locale.ROOT),
-                        root.join("roles").get("name")
-                ));
-            }
+                        // Filter by role
+                        if (role != null && !role.trim().isEmpty()) {
+                                predicates.add(criteriaBuilder.isMember(
+                                                role.toUpperCase(Locale.ROOT),
+                                                root.join("roles").get("name")));
+                        }
 
-            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
-        };
+                        return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+                };
 
-        Page<User> users = userRepository.findAll(spec, pageable);
-        return users.map(this::mapToUserManagementResponse);
-    }
-
-    @Override
-    public UserManagementResponse getUserById(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-        return mapToUserManagementResponse(user);
-    }
-
-    @Override
-    public UserManagementResponse createUser(CreateUserRequest request) {
-        // Check if email already exists
-        if (userRepository.existsByEmail(request.getEmail().toLowerCase(Locale.ROOT))) {
-            throw new AppException(ErrorCode.USER_ESIXSTED);
+                Page<User> users = userRepository.findAll(spec, pageable);
+                return users.map(this::mapToUserManagementResponse);
         }
 
-        // Get roles
-        Set<Role> roles = request.getRoleIds().stream()
-                .map(roleId -> roleRepository.findById(roleId)
-                        .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND)))
-                .collect(Collectors.toSet());
-
-        // Create user
-        User user = User.builder()
-                .name(request.getName())
-                .email(request.getEmail().toLowerCase(Locale.ROOT))
-                .password(passwordEncoder.encode(request.getPassword()))
-                .status(request.getStatus())
-                .roles(roles)
-                .build();
-
-        // Create profile
-        Profile profile = Profile.builder()
-                .user(user)
-                .build();
-        user.setProfile(profile);
-
-        // Save user first (without progress)
-        User savedUser = userRepository.save(user);
-        
-        // Create progress for students AFTER user is saved (to get user ID)
-        boolean hasStudentRole = roles.stream()
-                .anyMatch(r -> "STUDENT".equals(r.getName()));
-        if (hasStudentRole) {
-            Progress progress = Progress.builder()
-                    .userId(savedUser.getId())
-                    .totalAttemptNo(0)
-                    .acceptance(0.0f)
-                    .build();
-            progressRepository.save(progress);
-            log.info("Created progress for new student user: {}", savedUser.getEmail());
+        @Override
+        public UserManagementResponse getUserById(Long userId) {
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+                return mapToUserManagementResponse(user);
         }
 
-        log.info("Admin created new user: {} with roles: {}", savedUser.getEmail(), 
-                roles.stream().map(Role::getName).collect(Collectors.joining(", ")));
+        @Override
+        public UserManagementResponse createUser(CreateUserRequest request) {
+                // Check if email already exists
+                if (userRepository.existsByEmail(request.getEmail().toLowerCase(Locale.ROOT))) {
+                        throw new AppException(ErrorCode.USER_ESIXSTED);
+                }
 
-        return mapToUserManagementResponse(savedUser);
-    }
+                Set<Role> roles = resolveRoles(request.getRoleIds(), request.getRoleNames());
 
-    @Override
-    public UserManagementResponse updateUserStatus(Long userId, UpdateUserStatusRequest request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+                // Create user
+                User user = User.builder()
+                                .name(request.getName())
+                                .email(request.getEmail().toLowerCase(Locale.ROOT))
+                                .password(passwordEncoder.encode(request.getPassword()))
+                                .status(request.getStatus())
+                                .roles(roles)
+                                .build();
 
-        user.setStatus(request.getStatus());
-        User updatedUser = userRepository.save(user);
+                // Create profile
+                Profile profile = Profile.builder()
+                                .user(user)
+                                .build();
+                user.setProfile(profile);
 
-        log.info("Admin updated user {} status to: {}", user.getEmail(), request.getStatus());
-        return mapToUserManagementResponse(updatedUser);
-    }
+                // Save user first (without progress)
+                User savedUser = userRepository.save(user);
 
-    @Override
-    public UserManagementResponse updateUserRoles(Long userId, UpdateUserRoleRequest request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+                // Create progress for students AFTER user is saved (to get user ID)
+                boolean hasStudentRole = roles.stream()
+                                .anyMatch(r -> "STUDENT".equals(r.getName()));
+                if (hasStudentRole) {
+                        Progress progress = Progress.builder()
+                                        .userId(savedUser.getId())
+                                        .totalAttemptNo(0)
+                                        .acceptance(0.0f)
+                                        .build();
+                        progressRepository.save(progress);
+                        log.info("Created progress for new student user: {}", savedUser.getEmail());
+                }
 
-        // Get new roles
-        Set<Role> newRoles = request.getRoleIds().stream()
-                .map(roleId -> roleRepository.findById(roleId)
-                        .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND)))
-                .collect(Collectors.toSet());
+                log.info("Admin created new user: {} with roles: {}", savedUser.getEmail(),
+                                roles.stream().map(Role::getName).collect(Collectors.joining(", ")));
 
-        // Check if student role is added/removed to handle progress
-        boolean hadStudentRole = user.getRoles().stream()
-                .anyMatch(r -> "STUDENT".equals(r.getName()));
-        boolean hasStudentRole = newRoles.stream()
-                .anyMatch(r -> "STUDENT".equals(r.getName()));
-
-        // Update roles
-        user.setRoles(newRoles);
-
-        // Create progress if student role is added
-        if (!hadStudentRole && hasStudentRole && user.getProgress() == null) {
-            Progress progress = Progress.builder()
-                    .userId(user.getId())
-                    .totalAttemptNo(0)
-                    .acceptance(0.0f)
-                    .build();
-            progressRepository.save(progress);
-            user.setProgress(progress);
+                return mapToUserManagementResponse(savedUser);
         }
 
-        User updatedUser = userRepository.save(user);
+        @Override
+        public UserManagementResponse updateUserStatus(Long userId, UpdateUserStatusRequest request) {
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        log.info("Admin updated user {} roles to: {}", user.getEmail(),
-                newRoles.stream().map(Role::getName).collect(Collectors.joining(", ")));
+                user.setStatus(request.getStatus());
+                User updatedUser = userRepository.save(user);
 
-        return mapToUserManagementResponse(updatedUser);
-    }
-
-    @Override
-    public void deleteUser(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-
-        // Cannot delete admin if it's the last admin
-        boolean isAdmin = user.getRoles().stream()
-                .anyMatch(r -> "ADMIN".equals(r.getName()));
-        
-        if (isAdmin) {
-            long adminCount = userRepository.countByRolesName("ADMIN");
-            if (adminCount <= 1) {
-                throw new AppException(ErrorCode.CANNOT_DELETE_LAST_ADMIN);
-            }
+                log.info("Admin updated user {} status to: {}", user.getEmail(), request.getStatus());
+                return mapToUserManagementResponse(updatedUser);
         }
 
-        userRepository.delete(user);
-        log.info("Admin deleted user: {}", user.getEmail());
-    }
+        @Override
+        public UserManagementResponse updateUserRoles(Long userId, UpdateUserRoleRequest request) {
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-    @Override
-    public UserStatisticsResponse getUserStatistics() {
-        long totalUsers = userRepository.count();
-        long activeUsers = userRepository.countByStatus(UserStatus.ACTIVE);
-        long blockedUsers = userRepository.countByStatus(UserStatus.BLOCKED);
-        long unverifiedUsers = userRepository.countByStatus(UserStatus.UNVERIFIED);
-        long studentsCount = userRepository.countByRolesName("STUDENT");
-        long lecturersCount = userRepository.countByRolesName("LECTURER");
-        long adminsCount = userRepository.countByRolesName("ADMIN");
+                Set<Role> newRoles = resolveRoles(request.getRoleIds(), request.getRoleNames());
 
-        return UserStatisticsResponse.builder()
-                .totalUsers(totalUsers)
-                .activeUsers(activeUsers)
-                .blockedUsers(blockedUsers)
-                .unverifiedUsers(unverifiedUsers)
-                .studentsCount(studentsCount)
-                .lecturersCount(lecturersCount)
-                .adminsCount(adminsCount)
-                .build();
-    }
+                // Check if student role is added/removed to handle progress
+                boolean hadStudentRole = user.getRoles().stream()
+                                .anyMatch(r -> "STUDENT".equals(r.getName()));
+                boolean hasStudentRole = newRoles.stream()
+                                .anyMatch(r -> "STUDENT".equals(r.getName()));
 
-    private UserManagementResponse mapToUserManagementResponse(User user) {
-        Set<UserManagementResponse.RoleInfo> roleInfos = user.getRoles().stream()
-                .map(role -> UserManagementResponse.RoleInfo.builder()
-                        .id(role.getId())
-                        .name(role.getName())
-                        .description(role.getDescription())
-                        .build())
-                .collect(Collectors.toSet());
+                // Update roles
+                user.setRoles(newRoles);
 
-        UserManagementResponse.ProfileInfo profileInfo = null;
-        if (user.getProfile() != null) {
-            profileInfo = UserManagementResponse.ProfileInfo.builder()
-                    .avatarUrl(user.getProfile().getAvatarUrl())
-                    .bio(user.getProfile().getBio())
-                    .phone(user.getProfile().getPhone())
-                    .build();
+                // Create progress if student role is added
+                if (!hadStudentRole && hasStudentRole && user.getProgress() == null) {
+                        Progress progress = Progress.builder()
+                                        .userId(user.getId())
+                                        .totalAttemptNo(0)
+                                        .acceptance(0.0f)
+                                        .build();
+                        progressRepository.save(progress);
+                        user.setProgress(progress);
+                }
+
+                User updatedUser = userRepository.save(user);
+
+                log.info("Admin updated user {} roles to: {}", user.getEmail(),
+                                newRoles.stream().map(Role::getName).collect(Collectors.joining(", ")));
+
+                return mapToUserManagementResponse(updatedUser);
         }
 
-        return UserManagementResponse.builder()
-                .id(user.getId())
-                .name(user.getName())
-                .email(user.getEmail())
-                .status(user.getStatus())
-                .createdAt(user.getCreatedAt())
-                .roles(roleInfos)
-                .profile(profileInfo)
-                .build();
-    }
+        @Override
+        public void deleteUser(Long userId) {
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+                // Cannot delete admin if it's the last admin
+                boolean isAdmin = user.getRoles().stream()
+                                .anyMatch(r -> "ADMIN".equals(r.getName()));
+
+                if (isAdmin) {
+                        long adminCount = userRepository.countByRolesName("ADMIN");
+                        if (adminCount <= 1) {
+                                throw new AppException(ErrorCode.CANNOT_DELETE_LAST_ADMIN);
+                        }
+                }
+
+                userRepository.delete(user);
+                log.info("Admin deleted user: {}", user.getEmail());
+        }
+
+        @Override
+        public UserStatisticsResponse getUserStatistics() {
+                long totalUsers = userRepository.count();
+                long activeUsers = userRepository.countByStatus(UserStatus.ACTIVE);
+                long blockedUsers = userRepository.countByStatus(UserStatus.BLOCKED);
+                long unverifiedUsers = userRepository.countByStatus(UserStatus.UNVERIFIED);
+                long studentsCount = userRepository.countByRolesName("STUDENT");
+                long lecturersCount = userRepository.countByRolesName("LECTURER");
+                long adminsCount = userRepository.countByRolesName("ADMIN");
+
+                return UserStatisticsResponse.builder()
+                                .totalUsers(totalUsers)
+                                .activeUsers(activeUsers)
+                                .blockedUsers(blockedUsers)
+                                .unverifiedUsers(unverifiedUsers)
+                                .studentsCount(studentsCount)
+                                .lecturersCount(lecturersCount)
+                                .adminsCount(adminsCount)
+                                .build();
+        }
+
+        private UserManagementResponse mapToUserManagementResponse(User user) {
+                Set<UserManagementResponse.RoleInfo> roleInfos = user.getRoles().stream()
+                                .map(role -> UserManagementResponse.RoleInfo.builder()
+                                                .id(role.getId())
+                                                .name(role.getName())
+                                                .description(role.getDescription())
+                                                .build())
+                                .collect(Collectors.toSet());
+
+                UserManagementResponse.ProfileInfo profileInfo = null;
+                if (user.getProfile() != null) {
+                        profileInfo = UserManagementResponse.ProfileInfo.builder()
+                                        .avatarUrl(user.getProfile().getAvatarUrl())
+                                        .bio(user.getProfile().getBio())
+                                        .phone(user.getProfile().getPhone())
+                                        .build();
+                }
+
+                return UserManagementResponse.builder()
+                                .id(user.getId())
+                                .name(user.getName())
+                                .email(user.getEmail())
+                                .status(user.getStatus())
+                                .createdAt(user.getCreatedAt())
+                                .roles(roleInfos)
+                                .profile(profileInfo)
+                                .build();
+        }
+
+        private Set<Role> resolveRoles(Set<Long> roleIds, Set<String> roleNames) {
+                Set<Role> roles = new HashSet<>();
+
+                if (roleIds != null && !roleIds.isEmpty()) {
+                        roleIds.stream()
+                                        .filter(Objects::nonNull)
+                                        .forEach(roleId -> roles.add(roleRepository.findById(roleId)
+                                                        .orElseThrow(() -> new AppException(
+                                                                        ErrorCode.ROLE_NOT_FOUND))));
+                }
+
+                if (roleNames != null && !roleNames.isEmpty()) {
+                        roleNames.stream()
+                                        .filter(Objects::nonNull)
+                                        .map(name -> name.trim().toUpperCase(Locale.ROOT))
+                                        .filter(name -> !name.isEmpty())
+                                        .forEach(roleName -> roles.add(roleRepository.findByName(roleName)
+                                                        .orElseThrow(() -> new AppException(
+                                                                        ErrorCode.ROLE_NOT_FOUND))));
+                }
+
+                if (roles.isEmpty()) {
+                        throw new AppException(ErrorCode.BAD_REQUEST);
+                }
+                return roles;
+        }
 }

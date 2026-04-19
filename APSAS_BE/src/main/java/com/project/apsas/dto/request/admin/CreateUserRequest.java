@@ -3,7 +3,6 @@ package com.project.apsas.dto.request.admin;
 import com.project.apsas.enums.UserStatus;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,8 +25,9 @@ public class CreateUserRequest {
     @NotBlank(message = "PASSWORD_REQUIRED")
     private String password;
 
-    @NotEmpty(message = "ROLE_IDS_REQUIRED")
     private Set<Long> roleIds;
+
+    private Set<String> roleNames;
 
     @lombok.Builder.Default
     private UserStatus status = UserStatus.ACTIVE;

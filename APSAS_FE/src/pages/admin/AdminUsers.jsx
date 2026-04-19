@@ -28,8 +28,8 @@ export default function AdminUsers() {
       const result = await adminUserService.getUsers({
         page,
         size: 10,
-        keyword: search, // API uses 'keyword' for search
-        roleId: role ? getRoleIdByName(role) : undefined, // API uses 'roleId' (number)
+        search,
+        role: role ? role.toUpperCase() : undefined,
         status: status ? status.toUpperCase() : undefined,
       });
 
@@ -49,19 +49,6 @@ export default function AdminUsers() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Helper to convert role name to role ID
-  const getRoleIdByName = (roleName) => {
-    const roleMap = {
-      ADMIN: 1,
-      STUDENT: 2,
-      LECTURER: 3,
-      CONTENT_PROVIDER: 4,
-      PROVIDER: 4,
-      GUEST: 5,
-    };
-    return roleMap[roleName.toUpperCase()] || undefined;
   };
 
   // Fetch user statistics

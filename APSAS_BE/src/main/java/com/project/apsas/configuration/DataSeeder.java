@@ -17,13 +17,18 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.core.io.support.EncodedResource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import javax.sql.DataSource;
+import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.sql.Connection;
 import java.util.*;
 
 @Component
@@ -38,6 +43,7 @@ public class DataSeeder implements ApplicationRunner {
     private final TransactionTemplate transactionTemplate; // Dùng để quản lý transaction thủ công
     private final ResourceLoader resourceLoader;
     private final ObjectMapper objectMapper;
+    private final DataSource dataSource;
 
     @Value("${app.seed.enabled:true}")
     private boolean seedEnabled;
@@ -51,11 +57,18 @@ public class DataSeeder implements ApplicationRunner {
     @Value("${app.seed.demo-users-source:classpath:seed/demo-users.json}")
     private String demoUsersSource;
 
+    @Value("${app.seed.bootstrap-sql-enabled:true}")
+    private boolean seedBootstrapSqlEnabled;
+
+    @Value("${app.seed.bootstrap-sql-source:classpath:seed/bootstrap-data.sql}")
+    private String seedBootstrapSqlSource;
+
     public DataSeeder(PermissionRepository p, RoleRepository r, UserRepository u,
             ProfileRepository pr, PasswordEncoder e, AdminProperties a,
             PlatformTransactionManager transactionManager,
             ResourceLoader resourceLoader,
-            ObjectMapper objectMapper) { // Inject TransactionManager
+            ObjectMapper objectMapper,
+            DataSource dataSource) { // Inject TransactionManager
         this.permRepo = p;
         this.roleRepo = r;
         this.userRepo = u;
@@ -66,6 +79,7 @@ public class DataSeeder implements ApplicationRunner {
                 Objects.requireNonNull(transactionManager, "TransactionManager cannot be null"));
         this.resourceLoader = Objects.requireNonNull(resourceLoader, "ResourceLoader cannot be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "ObjectMapper cannot be null");
+        this.dataSource = Objects.requireNonNull(dataSource, "DataSource cannot be null");
     }
 
     @Override
@@ -80,6 +94,7 @@ public class DataSeeder implements ApplicationRunner {
         seedRolesAndPermissions();
         seedAdminUser();
         seedDemoUsers();
+        seedBootstrapSql();
 
         log.info("✅ Data seeding process finished.");
     }
@@ -324,6 +339,29 @@ public class DataSeeder implements ApplicationRunner {
         } catch (IOException ex) {
             log.error("Cannot read demo users source: {}", demoUsersSource, ex);
             return List.of();
+        }
+    }
+
+    private void seedBootstrapSql() {
+        if (!seedBootstrapSqlEnabled) {
+            log.info("Skip SQL bootstrap seeding (app.seed.bootstrap-sql-enabled=false)");
+            return;
+        }
+
+        String source = Optional.ofNullable(seedBootstrapSqlSource)
+                .filter(s -> !s.isBlank())
+                .orElse("classpath:seed/bootstrap-data.sql");
+        Resource resource = resourceLoader.getResource(source);
+        if (!resource.exists()) {
+            log.warn("Bootstrap SQL source not found: {}", source);
+            return;
+        }
+
+        try (Connection connection = dataSource.getConnection()) {
+            ScriptUtils.executeSqlScript(connection, new EncodedResource(resource, StandardCharsets.UTF_8));
+            log.info("Applied bootstrap SQL data from: {}", source);
+        } catch (Exception ex) {
+            log.error("Cannot apply bootstrap SQL data from: {}", source, ex);
         }
     }
 

@@ -59,7 +59,7 @@ const providerService = {
   // Xóa tài nguyên
   async deleteResource(id) {
     try {
-      const response = await api.delete(`/api/tutorials/${id}`);
+      const response = await api.delete(`/tutorials/${id}`);
 
       return {
         success: true,

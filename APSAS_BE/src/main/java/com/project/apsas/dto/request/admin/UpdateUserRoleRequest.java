@@ -13,6 +13,7 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UpdateUserRoleRequest {
-    @NotEmpty(message = "ROLE_IDS_REQUIRED")
     private Set<Long> roleIds;
+
+    private Set<String> roleNames;
 }
