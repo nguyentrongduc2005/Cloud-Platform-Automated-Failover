@@ -76,8 +76,10 @@ jobs:
           CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
           terraform plan \
+            -input=false \
             -var="project_id=$PROJECT_ID" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="github_repository=${{ github.repository }}" \
             -var="backend_image=$REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG" \
             -var="frontend_image=$REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG"
 
@@ -88,8 +90,10 @@ jobs:
           CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.auth.outputs.credentials_file_path }}
         run: |
           terraform apply -auto-approve \
+            -input=false \
             -var="project_id=$PROJECT_ID" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="github_repository=${{ github.repository }}" \
             -var="backend_image=$REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG" \
             -var="frontend_image=$REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG"
 
