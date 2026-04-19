@@ -79,7 +79,7 @@ jobs:
           gcloud run services update ${BACKEND_SERVICE_NAME}-failover \
             --project=$PROJECT_ID \
             --region=$SECONDARY_REGION \
-            --memory=1Gi \
+            --memory=2Gi \
             --update-env-vars=SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
             --image=$PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG
 
