@@ -17,9 +17,11 @@ permissions:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: europe-west4
-  TF_DIR: infrastructures/environments/prod
+  PRIMARY_REGION: europe-west4
+  SECONDARY_REGION: asia-east1
   IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+  BACKEND_SERVICE_NAME: apsas-backend
+  FRONTEND_SERVICE_NAME: apsas-frontend
 
 jobs:
   deploy:
@@ -46,71 +48,55 @@ jobs:
       - name: Login to Artifact Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGION }}-docker.pkg.dev
+          registry: ${{ env.PRIMARY_REGION }}-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker $PRIMARY_REGION-docker.pkg.dev --quiet
 
       - name: Build and push backend image
         run: |
-          docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG APSAS_BE
-          docker push $REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG
+          docker build -t $PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG APSAS_BE
+          docker push $PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG
 
       - name: Build and push frontend image
         run: |
-          docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG APSAS_FE
-          docker push $REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG
+          docker build -t $PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG APSAS_FE
+          docker push $PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform Init
-        working-directory: ${{ env.TF_DIR }}
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
-          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.auth.outputs.credentials_file_path }}
-        run: terraform init -upgrade
-
-      - name: Terraform Plan
-        working-directory: ${{ env.TF_DIR }}
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
-          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.auth.outputs.credentials_file_path }}
+      - name: Deploy backend primary
         run: |
-          terraform plan \
-            -input=false \
-            -lock-timeout=10m \
-            -var="project_id=$PROJECT_ID" \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -var="github_repository=${{ github.repository }}" \
-            -var="backend_image=$REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG" \
-            -var="frontend_image=$REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG"
+          gcloud run services update ${BACKEND_SERVICE_NAME}-primary \
+            --project=$PROJECT_ID \
+            --region=$PRIMARY_REGION \
+            --image=$PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG
 
-      - name: Terraform Apply
-        working-directory: ${{ env.TF_DIR }}
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
-          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.auth.outputs.credentials_file_path }}
+      - name: Deploy backend failover
         run: |
-          terraform apply -auto-approve \
-            -input=false \
-            -lock-timeout=10m \
-            -var="project_id=$PROJECT_ID" \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -var="github_repository=${{ github.repository }}" \
-            -var="backend_image=$REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG" \
-            -var="frontend_image=$REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG"
+          gcloud run services update ${BACKEND_SERVICE_NAME}-failover \
+            --project=$PROJECT_ID \
+            --region=$SECONDARY_REGION \
+            --image=$PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG
+
+      - name: Deploy frontend primary
+        run: |
+          gcloud run services update ${FRONTEND_SERVICE_NAME}-primary \
+            --project=$PROJECT_ID \
+            --region=$PRIMARY_REGION \
+            --image=$PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG
+
+      - name: Deploy frontend failover
+        run: |
+          gcloud run services update ${FRONTEND_SERVICE_NAME}-failover \
+            --project=$PROJECT_ID \
+            --region=$SECONDARY_REGION \
+            --image=$PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-frontend:$IMAGE_TAG
 
       - name: Smoke test frontend
-        working-directory: ${{ env.TF_DIR }}
         run: |
-          LB_IP=$(terraform output -raw global_lb_ip)
-          curl -fsS "http://${LB_IP}/" > /dev/null
+          curl -fsS "http://34.160.100.91/" > /dev/null
 
       - name: Smoke test backend health
-        working-directory: ${{ env.TF_DIR }}
         run: |
-          LB_IP=$(terraform output -raw global_lb_ip)
-          curl -fsS "http://${LB_IP}/api/healthz" > /dev/null
+          curl -fsS "http://34.160.100.91/api/healthz" > /dev/null
