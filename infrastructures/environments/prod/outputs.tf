@@ -1,4 +1,3 @@
-
 output "primary_db_instance_name" {
   value = module.database.primary_db_instance_name
 }
@@ -31,22 +30,6 @@ output "failover_redis_ip" {
   value = module.database.failover_redis_ip
 }
 
-output "primary_gke_cluster_name" {
-  value = module.gke_autopilot.primary_cluster_name
-}
-
-output "primary_gke_cluster_endpoint" {
-  value = module.gke_autopilot.primary_cluster_endpoint
-}
-
-output "failover_gke_cluster_name" {
-  value = module.gke_autopilot.failover_cluster_name
-}
-
-output "failover_gke_cluster_endpoint" {
-  value = module.gke_autopilot.failover_cluster_endpoint
-}
-
 output "primary_kafka_cluster_id" {
   value = module.kafka.primary_kafka_cluster_id
 }
@@ -63,44 +46,32 @@ output "failover_kafka_cluster_name" {
   value = module.kafka.failover_kafka_cluster_name
 }
 
-output "mci_primary_membership_id" {
-  value = module.multicluster_ingress.primary_membership_id
+output "backend_primary_cloud_run" {
+  value = module.cloud_run.backend_primary_url
 }
 
-output "mci_failover_membership_id" {
-  value = module.multicluster_ingress.failover_membership_id
+output "backend_failover_cloud_run" {
+  value = module.cloud_run.backend_failover_url
 }
 
-output "mci_name" {
-  value = module.multicluster_ingress.mci_name
+output "frontend_primary_cloud_run" {
+  value = module.cloud_run.frontend_primary_url
 }
 
-output "mcs_name" {
-  value = module.multicluster_ingress.mcs_name
+output "frontend_failover_cloud_run" {
+  value = module.cloud_run.frontend_failover_url
 }
 
-output "mci_status" {
-  value = module.multicluster_ingress.mci_status
+output "global_lb_ip" {
+  value = module.global_load_balancer.global_ip
 }
 
-output "frontend_mci_name" {
-  value = module.multicluster_ingress.frontend_mci_name
+output "frontend_entrypoint" {
+  value = module.global_load_balancer.frontend_url
 }
 
-output "frontend_mcs_name" {
-  value = module.multicluster_ingress.frontend_mcs_name
-}
-
-output "frontend_mci_status" {
-  value = module.multicluster_ingress.frontend_mci_status
-}
-
-output "frontend_dns_record_fqdn" {
-  value = try(google_dns_record_set.frontend_a[0].name, null)
-}
-
-output "frontend_dns_target_ip" {
-  value = var.frontend_domain_target_ip
+output "backend_entrypoint" {
+  value = module.global_load_balancer.api_url
 }
 
 output "artifact_registry_repository" {

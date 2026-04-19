@@ -1,70 +1,30 @@
-
-# Bắt buộc phải có đoạn này trong thư mục prod/main.tf
 module "networking" {
-  source               = "../../modules/networking" # Đường dẫn trỏ ngược về thư mục module
+  source               = "../../modules/networking"
   project_id           = var.project_id
-  vpc_name             = "main-failover-vpc"
+  vpc_name             = var.vpc_name
   primary_region       = var.primary_region
   failover_region      = var.secondary_region
-  primary_subnet_cidr  = "10.0.0.0/24"
-  failover_subnet_cidr = "10.1.0.0/24"
+  primary_subnet_cidr  = var.primary_subnet_cidr
+  failover_subnet_cidr = var.failover_subnet_cidr
 }
 
 module "database" {
   source     = "../../modules/database"
   project_id = var.project_id
-  # Truyền network_id từ output của module networking sang
   network_id = module.networking.network_id
 
-  primary_region  = var.primary_region
-  failover_region = var.secondary_region
-
-  name_prefix         = var.db_name_prefix
-  db_name             = var.db_name
-  db_user             = var.db_user
-  primary_db_tier     = var.primary_db_tier
-  replica_db_tier     = var.replica_db_tier
-  deletion_protection = var.db_deletion_protection
-
-  # Lấy mật khẩu từ biến môi trường (Sẽ hướng dẫn truyền vào ở bước dưới)
-  db_password = var.db_password
-}
-
-locals {
-  backend_env_vars_primary = merge(
-    var.backend_env_vars_primary,
-    var.kafka_bootstrap_servers_primary != "" ? { KAFKA = var.kafka_bootstrap_servers_primary } : {}
-  )
-
-  backend_env_vars_failover = merge(
-    var.backend_env_vars_failover,
-    var.kafka_bootstrap_servers_failover != "" ? { KAFKA = var.kafka_bootstrap_servers_failover } : {}
-  )
-}
-
-module "gke_autopilot" {
-  source = "../../modules/gke_autopilot"
-
-  project_id               = var.project_id
-  cluster_name_prefix      = var.cluster_name_prefix
-  primary_region           = var.primary_region
-  failover_region          = var.secondary_region
-  network_name             = module.networking.network_name
-  primary_subnetwork_name  = module.networking.primary_subnetwork_name
-  failover_subnetwork_name = module.networking.failover_subnetwork_name
-
-  cluster_deletion_protection = var.cluster_deletion_protection
-  release_channel             = var.gke_release_channel
-  enable_failover_cluster     = var.enable_failover_cluster
-
-  k8s_namespace              = var.k8s_namespace
-  create_namespace           = var.create_k8s_namespace
-  backend_secret_name        = var.backend_secret_name
-  frontend_secret_name       = var.frontend_secret_name
-  backend_env_vars_primary   = local.backend_env_vars_primary
-  backend_env_vars_failover  = local.backend_env_vars_failover
-  frontend_env_vars_primary  = var.frontend_env_vars_primary
-  frontend_env_vars_failover = var.frontend_env_vars_failover
+  primary_region                 = var.primary_region
+  failover_region                = var.secondary_region
+  name_prefix                    = var.db_name_prefix
+  db_name                        = var.db_name
+  db_user                        = var.db_user
+  primary_db_tier                = var.primary_db_tier
+  replica_db_tier                = var.replica_db_tier
+  deletion_protection            = var.db_deletion_protection
+  backup_start_time              = var.backup_start_time
+  transaction_log_retention_days = var.transaction_log_retention_days
+  redis_memory_size_gb           = var.redis_memory_size_gb
+  db_password                    = var.db_password
 }
 
 module "kafka" {
@@ -80,36 +40,31 @@ module "kafka" {
   kafka_memory_bytes       = var.kafka_memory_bytes
 }
 
-module "multicluster_ingress" {
-  source = "../../modules/multicluster_ingress"
+locals {
+  backend_env_vars_primary = merge(
+    var.backend_env_vars_primary,
+    {
+      MYSQL      = format("jdbc:mysql://%s:3306/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", module.database.primary_db_private_ip, var.db_name)
+      USER       = var.db_user
+      PASS       = var.db_password
+      REDIS_HOST = module.database.primary_redis_ip
+      REDIS_PORT = tostring(var.redis_port)
+    },
+    var.kafka_bootstrap_servers_primary != "" ? { KAFKA = var.kafka_bootstrap_servers_primary } : {}
+  )
 
-  project_id                     = var.project_id
-  membership_name_prefix         = var.mci_membership_name_prefix
-  primary_cluster_name           = module.gke_autopilot.primary_cluster_name
-  primary_cluster_location       = module.gke_autopilot.primary_cluster_location
-  primary_cluster_endpoint       = module.gke_autopilot.primary_cluster_endpoint
-  primary_cluster_ca_certificate = module.gke_autopilot.primary_cluster_ca_certificate
-
-  failover_cluster_name     = module.gke_autopilot.failover_cluster_name
-  failover_cluster_location = module.gke_autopilot.failover_cluster_location
-  enable_failover_cluster   = var.enable_failover_cluster
-
-  k8s_namespace            = var.k8s_namespace
-  mci_service_name         = var.mci_service_name
-  mci_ingress_name         = var.mci_ingress_name
-  mci_backend_label_key    = var.mci_backend_label_key
-  mci_backend_label_value  = var.mci_backend_label_value
-  mci_service_port         = var.mci_service_port
-  mci_target_port          = var.mci_target_port
-  create_mci_k8s_resources = var.create_mci_k8s_resources
-
-  frontend_mci_service_name         = var.frontend_mci_service_name
-  frontend_mci_ingress_name         = var.frontend_mci_ingress_name
-  frontend_mci_label_key            = var.frontend_mci_label_key
-  frontend_mci_label_value          = var.frontend_mci_label_value
-  frontend_mci_service_port         = var.frontend_mci_service_port
-  frontend_mci_target_port          = var.frontend_mci_target_port
-  create_frontend_mci_k8s_resources = var.create_frontend_mci_k8s_resources
+  backend_env_vars_failover = merge(
+    var.backend_env_vars_failover,
+    {
+      MYSQL            = format("jdbc:mysql://%s:3306/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", module.database.replica_db_private_ip, var.db_name)
+      USER             = var.db_user
+      PASS             = var.db_password
+      REDIS_HOST       = module.database.failover_redis_ip
+      REDIS_PORT       = tostring(var.redis_port)
+      APP_SEED_ENABLED = "false"
+    },
+    var.kafka_bootstrap_servers_failover != "" ? { KAFKA = var.kafka_bootstrap_servers_failover } : {}
+  )
 }
 
 module "security_and_ci" {
@@ -125,29 +80,152 @@ module "security_and_ci" {
   cicd_service_account_id       = var.cicd_service_account_id
 }
 
-resource "google_dns_managed_zone" "frontend" {
-  count = var.enable_frontend_dns && var.create_frontend_dns_zone ? 1 : 0
+module "cloud_run" {
+  source = "../../modules/cloud_run"
 
-  project     = var.project_id
-  name        = var.frontend_dns_zone_name
-  dns_name    = var.frontend_dns_domain
-  description = "Public DNS zone for frontend"
+  project_id                 = var.project_id
+  primary_region             = var.primary_region
+  secondary_region           = var.secondary_region
+  network_name               = module.networking.network_name
+  backend_service_name       = var.backend_service_name
+  frontend_service_name      = var.frontend_service_name
+  runtime_service_account_id = var.runtime_service_account_id
+
+  backend_image  = var.backend_image
+  frontend_image = var.frontend_image
+
+  backend_env_vars_primary   = local.backend_env_vars_primary
+  backend_env_vars_failover  = local.backend_env_vars_failover
+  frontend_env_vars_primary  = var.frontend_env_vars_primary
+  frontend_env_vars_failover = var.frontend_env_vars_failover
+
+  primary_vpc_connector_name    = var.primary_vpc_connector_name
+  secondary_vpc_connector_name  = var.secondary_vpc_connector_name
+  primary_vpc_connector_cidr    = var.primary_vpc_connector_cidr
+  secondary_vpc_connector_cidr  = var.secondary_vpc_connector_cidr
+  vpc_connector_min_instances   = var.vpc_connector_min_instances
+  vpc_connector_max_instances   = var.vpc_connector_max_instances
+  cloud_run_deletion_protection = var.cloud_run_deletion_protection
+  allow_unauthenticated_invoker = var.allow_unauthenticated_invoker
+
+  backend_min_instances_primary  = var.backend_min_instances_primary
+  backend_max_instances_primary  = var.backend_max_instances_primary
+  backend_min_instances_failover = var.backend_min_instances_failover
+  backend_max_instances_failover = var.backend_max_instances_failover
+
+  frontend_min_instances_primary  = var.frontend_min_instances_primary
+  frontend_max_instances_primary  = var.frontend_max_instances_primary
+  frontend_min_instances_failover = var.frontend_min_instances_failover
+  frontend_max_instances_failover = var.frontend_max_instances_failover
 }
 
-resource "google_dns_record_set" "frontend_a" {
-  count = var.enable_frontend_dns ? 1 : 0
+module "global_load_balancer" {
+  source = "../../modules/global_load_balancer"
 
-  project      = var.project_id
-  name         = var.frontend_dns_record_name
-  managed_zone = var.create_frontend_dns_zone ? google_dns_managed_zone.frontend[0].name : var.frontend_dns_zone_name
-  type         = "A"
-  ttl          = var.frontend_dns_ttl
-  rrdatas      = [var.frontend_domain_target_ip]
+  project_id       = var.project_id
+  name_prefix      = var.lb_name_prefix
+  primary_region   = var.primary_region
+  secondary_region = var.secondary_region
 
-  lifecycle {
-    precondition {
-      condition     = var.frontend_domain_target_ip != ""
-      error_message = "frontend_domain_target_ip must be set when enable_frontend_dns=true"
+  backend_primary_service_name   = module.cloud_run.backend_primary_name
+  backend_failover_service_name  = module.cloud_run.backend_failover_name
+  frontend_primary_service_name  = module.cloud_run.frontend_primary_name
+  frontend_failover_service_name = module.cloud_run.frontend_failover_name
+
+  enable_failover_backends = var.enable_failover_traffic
+}
+
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+resource "google_storage_bucket_iam_member" "cloudsql_import_reader" {
+  count  = var.enable_db_seed_import ? 1 : 0
+  bucket = var.db_seed_bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloud-sql.iam.gserviceaccount.com"
+}
+
+resource "null_resource" "db_seed_import" {
+  count = var.enable_db_seed_import ? 1 : 0
+
+  triggers = {
+    instance = module.database.primary_db_instance_name
+    database = module.database.database_name
+    uris     = sha1(join(",", var.db_seed_import_uris))
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-lc"]
+    command     = <<EOC
+set -euo pipefail
+for uri in ${join(" ", var.db_seed_import_uris)}; do
+  gcloud sql import sql "${module.database.primary_db_instance_name}" "$uri" \
+    --database="${module.database.database_name}" \
+    --project="${var.project_id}" \
+    --quiet || true
+done
+EOC
+  }
+
+  depends_on = [
+    module.database,
+    google_storage_bucket_iam_member.cloudsql_import_reader
+  ]
+}
+
+resource "google_monitoring_uptime_check_config" "frontend" {
+  display_name = "apsas-frontend-uptime"
+  timeout      = "10s"
+  period       = "60s"
+
+  http_check {
+    path = "/"
+    port = 80
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      host = module.global_load_balancer.global_ip
+    }
+  }
+}
+
+resource "google_monitoring_uptime_check_config" "backend" {
+  display_name = "apsas-backend-uptime"
+  timeout      = "10s"
+  period       = "60s"
+
+  http_check {
+    path = "/api/healthz"
+    port = 80
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      host = module.global_load_balancer.global_ip
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "backend_uptime" {
+  display_name = "apsas-backend-uptime-alert"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Backend uptime failed"
+    condition_threshold {
+      filter          = "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\" AND metric.label.check_id=\"${google_monitoring_uptime_check_config.backend.uptime_check_id}\""
+      duration        = "300s"
+      comparison      = "COMPARISON_LT"
+      threshold_value = 1
+
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_FRACTION_TRUE"
+      }
     }
   }
 }
