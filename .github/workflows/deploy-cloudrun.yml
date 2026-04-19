@@ -70,6 +70,7 @@ jobs:
           gcloud run services update ${BACKEND_SERVICE_NAME}-primary \
             --project=$PROJECT_ID \
             --region=$PRIMARY_REGION \
+            --update-env-vars=SPRING_JPA_HIBERNATE_DDL_AUTO=update \
             --image=$PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG
 
       - name: Deploy backend failover
@@ -77,6 +78,7 @@ jobs:
           gcloud run services update ${BACKEND_SERVICE_NAME}-failover \
             --project=$PROJECT_ID \
             --region=$SECONDARY_REGION \
+            --update-env-vars=SPRING_JPA_HIBERNATE_DDL_AUTO=update \
             --image=$PRIMARY_REGION-docker.pkg.dev/$PROJECT_ID/apsas-apps/apsas-backend:$IMAGE_TAG
 
       - name: Deploy frontend primary
