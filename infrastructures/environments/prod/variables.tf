@@ -287,3 +287,8 @@ variable "cicd_service_account_id" {
   type    = string
   default = "github-actions-cicd"
 }
+
+variable "terraform_state_bucket_name" {
+  type    = string
+  default = "apsas-tf-state-prod-bucket"
+}

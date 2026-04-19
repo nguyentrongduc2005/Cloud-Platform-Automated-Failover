@@ -78,6 +78,7 @@ module "security_and_ci" {
   workload_identity_pool_id     = var.workload_identity_pool_id
   workload_identity_provider_id = var.workload_identity_provider_id
   cicd_service_account_id       = var.cicd_service_account_id
+  terraform_state_bucket_name   = var.terraform_state_bucket_name
 }
 
 module "cloud_run" {

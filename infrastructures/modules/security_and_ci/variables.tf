@@ -42,3 +42,9 @@ variable "cicd_service_account_id" {
   type        = string
   default     = "github-actions-cicd"
 }
+
+variable "terraform_state_bucket_name" {
+  description = "GCS bucket name used by Terraform remote backend"
+  type        = string
+  default     = ""
+}

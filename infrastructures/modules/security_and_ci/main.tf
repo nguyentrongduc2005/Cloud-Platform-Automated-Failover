@@ -67,6 +67,13 @@ resource "google_project_iam_member" "cicd_sa_user" {
   member  = "serviceAccount:${google_service_account.cicd.email}"
 }
 
+resource "google_storage_bucket_iam_member" "cicd_tf_state_admin" {
+  count  = var.terraform_state_bucket_name != "" ? 1 : 0
+  bucket = var.terraform_state_bucket_name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cicd.email}"
+}
+
 resource "google_iam_workload_identity_pool" "github" {
   project                   = var.project_id
   workload_identity_pool_id = var.workload_identity_pool_id
