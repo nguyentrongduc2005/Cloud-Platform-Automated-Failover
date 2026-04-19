@@ -13,21 +13,19 @@ terraform {
 
 # Provider mặc định (sẽ dùng primary_region)
 provider "google" {
-  project     = var.project_id
-  region      = var.primary_region
-  credentials = file("terraform-admin-key.json")
+  project = var.project_id
+  region  = var.primary_region
 }
 
 provider "google-beta" {
-  project     = var.project_id
-  region      = var.primary_region
-  credentials = file("terraform-admin-key.json")
+  project = var.project_id
+  region  = var.primary_region
 }
 
 # Provider dành cho vùng dự phòng (cần gọi alias = "google.secondary" khi dùng)
 provider "google" {
-  alias       = "secondary"
-  project     = var.project_id
-  region      = var.secondary_region
-  credentials = file("terraform-admin-key.json")
+  alias   = "secondary"
+  project = var.project_id
+  region  = var.secondary_region
 }
+ 
