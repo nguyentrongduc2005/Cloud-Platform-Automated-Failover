@@ -15,14 +15,16 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class ProfileAvatarServiceImpl implements ProfileAvatarService {
@@ -36,15 +38,15 @@ public class ProfileAvatarServiceImpl implements ProfileAvatarService {
     String folder;
 
     @Override
-    public ProfileResponse updateMyAvatar(MultipartFile file) throws IOException {
-        // 1. Kiểm tra file hợp lệ
+    public ProfileResponse updateMyAvatar(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            // TODO: Nếu trong ErrorCode của bạn có mã nào hợp với validate sai,
-            // hãy sửa lại cho đúng. Tạm thời dùng VALIDATION_FAILED (hoặc BAD_REQUEST tuỳ enum của bạn).
             throw new AppException(ErrorCode.VALIDATION_FAILED);
         }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+            throw new AppException(ErrorCode.UNSUPPORTED_MEDIA);
+        }
 
-        // 2. Lấy id user hiện tại từ token (AuthService đã có sẵn trong project)
         Long userId;
         try {
             userId = Long.parseLong(authService.currentId());
@@ -52,7 +54,6 @@ public class ProfileAvatarServiceImpl implements ProfileAvatarService {
             throw new AppException(ErrorCode.UNAUTHENTICATED);
         }
 
-        // 3. Lấy user & profile từ DB
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
@@ -60,30 +61,23 @@ public class ProfileAvatarServiceImpl implements ProfileAvatarService {
         if (profile == null) {
             profile = new Profile();
             profile.setUser(user);
+            user.setProfile(profile);
         }
 
-        // 4. Upload lên Cloudinary
-        // Nếu trong application.yaml có folder-name riêng thì bạn có thể truyền vào
-        // Ở đây ví dụ: folder = "avatars"
         String publicId = UUID.randomUUID().toString();
-        boolean success = false;
         try {
             UploadResult uploadResult = cloudinaryService.upload(file, folder, publicId);
             profile.setAvatarUrl(uploadResult.getUrl());
-            success = true;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Avatar upload failed for userId={}", userId, e);
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
         }
-
-
-        // 5. Lưu URL avatar vào profile
 
         profileRepository.save(profile);
 
-        // 6. Build ProfileResponse trả về giống các API profile khác
         return ProfileResponse.builder()
                 .avatar(profile.getAvatarUrl())
-                .success(success)
+                .success(true)
                 .build();
     }
 }

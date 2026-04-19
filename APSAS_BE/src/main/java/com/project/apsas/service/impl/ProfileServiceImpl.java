@@ -30,12 +30,19 @@ public class ProfileServiceImpl implements ProfileService {
         try {
             userId = Long.parseLong(idStr);
 
-        } catch (NumberFormatException e) { throw new AppException(ErrorCode.UNAUTHORIZED); }
+        } catch (NumberFormatException e) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND));
 
         Profile profile = user.getProfile();
+        if (profile == null) {
+            profile = Profile.builder().user(user).build();
+            user.setProfile(profile);
+            userRepository.save(user);
+        }
 
         return ProfileResponse.builder()
                 .id(user.getId())
@@ -45,11 +52,10 @@ public class ProfileServiceImpl implements ProfileService {
                 .phone(profile.getPhone())
                 .address(profile.getAddress())
                 .gender(profile.getGender() == null
-                    ? ""
-                        : profile.getGender().name()
-                        )
+                        ? ""
+                        : profile.getGender().name())
                 .email(user.getEmail())
-                .avatar(profile.getAvatarUrl())         // map nếu có field/avatar trong DB
+                .avatar(profile.getAvatarUrl()) // map nếu có field/avatar trong DB
                 .build();
     }
 }

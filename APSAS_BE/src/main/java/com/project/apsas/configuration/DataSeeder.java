@@ -1,5 +1,7 @@
 package com.project.apsas.configuration;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.apsas.entity.Permission;
 import com.project.apsas.entity.Profile;
 import com.project.apsas.entity.Role;
@@ -13,11 +15,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.io.IOException;
+import java.time.LocalDate;
 import java.util.*;
 
 @Component
@@ -30,25 +36,42 @@ public class DataSeeder implements ApplicationRunner {
     private final PasswordEncoder encoder;
     private final AdminProperties admin;
     private final TransactionTemplate transactionTemplate; // Dùng để quản lý transaction thủ công
+    private final ResourceLoader resourceLoader;
+    private final ObjectMapper objectMapper;
 
     @Value("${app.seed.enabled:true}")
     private boolean seedEnabled;
 
+    @Value("${app.seed.demo-users-enabled:true}")
+    private boolean seedDemoUsersEnabled;
+
+    @Value("${app.seed.demo-users-password:Demo@12345}")
+    private String demoUsersPassword;
+
+    @Value("${app.seed.demo-users-source:classpath:seed/demo-users.json}")
+    private String demoUsersSource;
+
     public DataSeeder(PermissionRepository p, RoleRepository r, UserRepository u,
-                      ProfileRepository pr, PasswordEncoder e, AdminProperties a,
-                      PlatformTransactionManager transactionManager) { // Inject TransactionManager
+            ProfileRepository pr, PasswordEncoder e, AdminProperties a,
+            PlatformTransactionManager transactionManager,
+            ResourceLoader resourceLoader,
+            ObjectMapper objectMapper) { // Inject TransactionManager
         this.permRepo = p;
         this.roleRepo = r;
         this.userRepo = u;
         this.profileRepo = pr;
         this.encoder = e;
         this.admin = a;
-        this.transactionTemplate = new TransactionTemplate(Objects.requireNonNull(transactionManager, "TransactionManager cannot be null"));
+        this.transactionTemplate = new TransactionTemplate(
+                Objects.requireNonNull(transactionManager, "TransactionManager cannot be null"));
+        this.resourceLoader = Objects.requireNonNull(resourceLoader, "ResourceLoader cannot be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "ObjectMapper cannot be null");
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!seedEnabled) return;
+        if (!seedEnabled)
+            return;
 
         log.info("🚀 Starting data seeding...");
 
@@ -56,6 +79,7 @@ public class DataSeeder implements ApplicationRunner {
         seedPermissions();
         seedRolesAndPermissions();
         seedAdminUser();
+        seedDemoUsers();
 
         log.info("✅ Data seeding process finished.");
     }
@@ -86,8 +110,7 @@ public class DataSeeder implements ApplicationRunner {
                     "PROFILE_READ", "PROFILE_WRITE", "SUPPORT_CREATE",
                     "RESOURCE_READ", "RESOURCE_WRITE", "TESTCASE_READ", "TESTCASE_WRITE",
                     "SCHEDULE_READ", "NOTIF_READ", "NOTIF_WRITE",
-                    "USER_MANAGE", "API_MANAGE", "MAINTENANCE_MANAGE", "POLICY_MANAGE"
-            );
+                    "USER_MANAGE", "API_MANAGE", "MAINTENANCE_MANAGE", "POLICY_MANAGE");
 
             for (String name : permissions) {
                 if (permRepo.findByName(name).isEmpty()) {
@@ -114,23 +137,22 @@ public class DataSeeder implements ApplicationRunner {
                     "DASHBOARD_VIEW", "PROFILE_READ", "PROFILE_WRITE",
                     "VIEW_COURSES", "ENROLL_COURSE", "SUBMIT_ASSIGNMENT",
                     "VIEW_NOTIFICATIONS", "REQUEST_HELP", "RESOURCE_READ",
-                    "SCHEDULE_READ", "SUPPORT_CREATE", "VIEW_SUBMISSIONS"
-            ));
+                    "SCHEDULE_READ", "SUPPORT_CREATE", "VIEW_SUBMISSIONS"));
 
             roleMap.put("LECTURER", List.of(
                     "DASHBOARD_VIEW", "PROFILE_READ", "PROFILE_WRITE",
                     "VIEW_COURSES", "CREATE_COURSE", "UPDATE_COURSE", "DELETE_COURSE",
                     "VIEW_SUBMISSIONS", "EVALUATE_SUBMISSIONS", "VIEW_HELP_REQUESTS",
                     "RESPOND_FEEDBACK", "VIEW_TEACHER_STATS", "VIEW_NOTIFICATIONS",
-                    "RESOURCE_READ", "RESOURCE_WRITE", "SUPPORT_CREATE"
-            ));
+                    "RESOURCE_READ", "RESOURCE_WRITE", "SUPPORT_CREATE"));
 
             roleMap.put("CONTENT_PROVIDER", List.of(
                     "DASHBOARD_VIEW", "PROFILE_READ", "PROFILE_WRITE",
                     "CREATE_TUTORIAL", "UPDATE_TUTORIAL", "DELETE_TUTORIAL", "VIEW_OWN_TUTORIALS",
                     "CREATE_CONTENT", "UPDATE_CONTENT", "CREATE_ASSIGNMENT", "UPDATE_ASSIGNMENT",
-                    "RESOURCE_READ", "RESOURCE_WRITE", "VIEW_NOTIFICATIONS", "SUPPORT_CREATE"
-            ));
+                    "RESOURCE_READ", "RESOURCE_WRITE", "VIEW_NOTIFICATIONS", "SUPPORT_CREATE"));
+
+            roleMap.put("PROVIDER", roleMap.get("CONTENT_PROVIDER"));
 
             // Admin lấy full quyền
             List<String> allPerms = permRepo.findAll().stream().map(Permission::getName).toList();
@@ -156,7 +178,8 @@ public class DataSeeder implements ApplicationRunner {
                         .filter(p -> requiredPerms.contains(p.getName()))
                         .toList();
 
-                if (role.getPermissions() == null) role.setPermissions(new HashSet<>());
+                if (role.getPermissions() == null)
+                    role.setPermissions(new HashSet<>());
 
                 // 3. Logic CHECK TRÙNG LẶP quan trọng:
                 // Chỉ thêm những permission mà role chưa có (so sánh bằng Tên)
@@ -187,6 +210,9 @@ public class DataSeeder implements ApplicationRunner {
             String email = Optional.ofNullable(admin.getEmail()).orElse("admin@apsas.local");
             String name = Optional.ofNullable(admin.getName()).orElse("APSAS Admin");
             String rawPass = Optional.ofNullable(admin.getPassword()).orElse("Admin@12345");
+            if (admin.getPassword() == null || admin.getPassword().isBlank()) {
+                log.warn("Admin password is using fallback value. Set app.admin.password in production.");
+            }
 
             Optional<User> existingUser = userRepo.findByEmail(email);
 
@@ -203,7 +229,7 @@ public class DataSeeder implements ApplicationRunner {
                         .roles(new HashSet<>(Collections.singletonList(adminRole)))
                         .build();
 
-                User savedUser = Objects.requireNonNull(userRepo.save(u), "Saved user cannot be null");
+                User savedUser = userRepo.save(Objects.requireNonNull(u, "User cannot be null"));
 
                 // Tạo Profile
                 Profile profile = Profile.builder().user(savedUser).build();
@@ -221,5 +247,86 @@ public class DataSeeder implements ApplicationRunner {
             }
             return null;
         });
+    }
+
+    private void seedDemoUsers() {
+        if (!seedDemoUsersEnabled) {
+            log.info("Skip demo user seeding (app.seed.demo-users-enabled=false)");
+            return;
+        }
+
+        List<DemoUserSeed> demoUsers = loadDemoUsersFromSource();
+        if (demoUsers.isEmpty()) {
+            log.info("Skip demo user seeding because source has no records: {}", demoUsersSource);
+            return;
+        }
+
+        transactionTemplate.execute(status -> {
+            log.info("Seeding demo users...");
+
+            for (DemoUserSeed demo : demoUsers) {
+                User user = userRepo.findByEmail(demo.email)
+                        .orElseGet(() -> {
+                            Role role = roleRepo.findByName(demo.roleName)
+                                    .orElseThrow(() -> new RuntimeException("Role not found: " + demo.roleName));
+
+                            User newUser = User.builder()
+                                    .name(demo.name)
+                                    .email(demo.email)
+                                    .password(encoder.encode(demoUsersPassword))
+                                    .status(UserStatus.ACTIVE)
+                                    .roles(new HashSet<>(Collections.singletonList(role)))
+                                    .build();
+                            return userRepo.save(Objects.requireNonNull(newUser, "Demo user cannot be null"));
+                        });
+
+                if (user.getProfile() == null) {
+                    Profile profile = Profile.builder()
+                            .user(user)
+                            .avatarUrl(demo.avatarUrl)
+                            .bio("Auto seeded user for UI rendering")
+                            .address("Hanoi")
+                            .phone("0900000000")
+                            .dob(LocalDate.of(2000, 1, 1))
+                            .build();
+                    profileRepo.save(Objects.requireNonNull(profile, "Profile cannot be null"));
+                }
+            }
+
+            log.info("Demo users seeded with default password from app.seed.demo-users-password");
+            return null;
+        });
+    }
+
+    private List<DemoUserSeed> loadDemoUsersFromSource() {
+        try {
+            String source = demoUsersSource;
+            if (source == null || source.isBlank()) {
+                source = "classpath:seed/demo-users.json";
+            }
+            Resource resource = resourceLoader.getResource(source);
+            if (!resource.exists()) {
+                log.warn("Demo user source not found: {}", source);
+                return List.of();
+            }
+
+            List<DemoUserSeed> parsed = objectMapper.readValue(
+                    resource.getInputStream(),
+                    new TypeReference<List<DemoUserSeed>>() {
+                    });
+
+            return parsed.stream()
+                    .filter(Objects::nonNull)
+                    .filter(item -> item.email != null && !item.email.isBlank())
+                    .filter(item -> item.name != null && !item.name.isBlank())
+                    .filter(item -> item.roleName != null && !item.roleName.isBlank())
+                    .toList();
+        } catch (IOException ex) {
+            log.error("Cannot read demo users source: {}", demoUsersSource, ex);
+            return List.of();
+        }
+    }
+
+    private record DemoUserSeed(String email, String name, String roleName, String avatarUrl) {
     }
 }

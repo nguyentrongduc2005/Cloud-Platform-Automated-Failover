@@ -154,6 +154,8 @@ web:
 
 app:
   name: CodeVerse
+  seed:
+    demo-users-source: ${DEMO_USERS_SOURCE:classpath:seed/demo-users.json}
   kafka:
     topic:
       verify-email: verify-email

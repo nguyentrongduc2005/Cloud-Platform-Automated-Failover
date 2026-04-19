@@ -12,8 +12,6 @@ import java.util.Arrays;
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-
-
     @ExceptionHandler(value = AppException.class)
     public ResponseEntity<ApiResponse> handleAppException(AppException ex) {
         ApiResponse apiResponse = new ApiResponse();
@@ -38,23 +36,23 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(value = MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse> handleArgumentNotValidException(MethodArgumentNotValidException ex) {
         String rawMessage = ex.getFieldError() != null
-            ? ex.getFieldError().getDefaultMessage()
-            : ErrorCode.VALIDATION_FAILED.getDefaultMessage();
+                ? ex.getFieldError().getDefaultMessage()
+                : ErrorCode.VALIDATION_FAILED.getDefaultMessage();
 
         ErrorCode error = Arrays.stream(ErrorCode.values())
-            .filter(code -> code.name().equals(rawMessage))
-            .findFirst()
-            .orElse(ErrorCode.VALIDATION_FAILED);
+                .filter(code -> code.name().equals(rawMessage))
+                .findFirst()
+                .orElse(ErrorCode.VALIDATION_FAILED);
 
         ApiResponse apiResponse = new ApiResponse();
         apiResponse.setCode(error.getCode());
-        // If validation message is not an enum key, return the original validator message.
+        // If validation message is not an enum key, return the original validator
+        // message.
         apiResponse.setMessage(error == ErrorCode.VALIDATION_FAILED
-            ? rawMessage
-            : error.getDefaultMessage());
+                ? rawMessage
+                : error.getDefaultMessage());
         return ResponseEntity.badRequest().body(apiResponse);
     }
-
 
     @ExceptionHandler(value = Exception.class)
     public ResponseEntity<ApiResponse> handleRuntimeException(Exception ex) {

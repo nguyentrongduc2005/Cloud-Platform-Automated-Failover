@@ -9,10 +9,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-
 @RestController
-@RequestMapping("/me/avatar/upload")
+@RequestMapping({ "/me/avatar/upload", "/me/avatar" })
 @RequiredArgsConstructor
 public class ProfileAvatarController {
 
@@ -20,7 +18,7 @@ public class ProfileAvatarController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
-    public ApiResponse<ProfileResponse> uploadAvatar(@RequestPart("file") MultipartFile file) throws IOException {
+    public ApiResponse<ProfileResponse> uploadAvatar(@RequestParam("file") MultipartFile file) {
         ProfileResponse profile = profileAvatarService.updateMyAvatar(file);
 
         return ApiResponse.<ProfileResponse>builder()

@@ -91,17 +91,17 @@ output "github_workload_identity_provider" {
 }
 
 output "monitoring_uptime_backend_check_id" {
-  value = google_monitoring_uptime_check_config.backend.uptime_check_id
+  value = module.monitoring.uptime_backend_check_id
 }
 
 output "monitoring_uptime_frontend_check_id" {
-  value = google_monitoring_uptime_check_config.frontend.uptime_check_id
+  value = module.monitoring.uptime_frontend_check_id
 }
 
 output "logging_metric_backend_error_count" {
-  value = google_logging_metric.backend_error_count.name
+  value = module.monitoring.backend_error_metric_name
 }
 
 output "logging_metric_frontend_error_count" {
-  value = google_logging_metric.frontend_error_count.name
+  value = module.monitoring.frontend_error_metric_name
 }

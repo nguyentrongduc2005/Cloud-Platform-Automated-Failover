@@ -1,0 +1,20 @@
+[
+  {
+    "email": "student.demo@apsas.local",
+    "name": "Demo Student",
+    "roleName": "STUDENT",
+    "avatarUrl": "https://i.pravatar.cc/300?img=12"
+  },
+  {
+    "email": "lecturer.demo@apsas.local",
+    "name": "Demo Lecturer",
+    "roleName": "LECTURER",
+    "avatarUrl": "https://i.pravatar.cc/300?img=22"
+  },
+  {
+    "email": "provider.demo@apsas.local",
+    "name": "Demo Provider",
+    "roleName": "PROVIDER",
+    "avatarUrl": "https://i.pravatar.cc/300?img=32"
+  }
+]

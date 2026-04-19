@@ -22,14 +22,14 @@ public class User {
     Long id;
     @Column(nullable = false, length = 120)
     String name;
-    @Column(nullable = false, length = 190,  unique = true)
+    @Column(nullable = false, length = 190, unique = true)
     @EqualsAndHashCode.Include
     String email;
     @Column(nullable = false, length = 255)
     String password;
     @Enumerated(EnumType.STRING)
     UserStatus status;
-    @Column( updatable = false, insertable = false)
+    @Column(updatable = false, insertable = false)
     LocalDateTime createdAt;
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
@@ -62,7 +62,7 @@ public class User {
     @lombok.Builder.Default
     @ToString.Exclude
     private Set<Notification> notifications = new HashSet<>();
-    
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id", referencedColumnName = "user_id", insertable = false, updatable = false)
     @ToString.Exclude
@@ -73,7 +73,6 @@ public class User {
     RefreshToken refreshToken;
 
     public String getAvatarUrl() {
-
-        return "";
+        return profile != null ? profile.getAvatarUrl() : null;
     }
 }

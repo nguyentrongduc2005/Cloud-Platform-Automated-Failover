@@ -5,6 +5,7 @@ Hệ thống tự động chấm code, đánh giá kỹ năng và đưa ra phả
 ## 🚀 Quick Start
 
 ### 1. Start Docker Services
+
 ```bash
 cd environment
 docker compose up -d
@@ -13,24 +14,45 @@ docker compose up -d
 ### 2. Run Application
 
 **Cách 1: Normal Start (Quick)**
+
 ```powershell
 .\run-local.ps1
 ```
 
 **Cách 2: Start với Cleanup** (nếu gặp lỗi)
+
 ```powershell
 .\run-local.ps1 -Cleanup
 ```
 
 **Cách 3: Force Cleanup** (không hỏi)
+
 ```powershell
 .\run-local.ps1 -Cleanup -Force
 ```
 
 📖 **Chi tiết:** Xem [STARTUP_GUIDE.md](STARTUP_GUIDE.md)
 
----
+## Demo Seed Data (External File)
 
+Seeder supports external demo user data (no hardcoded list in Java):
+
+- Source file: `src/main/resources/seed/demo-users.json`
+- Override source path by env var: `DEMO_USERS_SOURCE`
+- Enable/disable demo seed by env var: `APP_SEED_DEMO_USERS_ENABLED` (default `true`)
+
+Example JSON item:
+
+```json
+{
+  "email": "student.demo@apsas.local",
+  "name": "Demo Student",
+  "roleName": "STUDENT",
+  "avatarUrl": "https://i.pravatar.cc/300?img=12"
+}
+```
+
+---
 
 > Spring Boot 3, Java 17+, mysql, WebClient, JWT, Flyway, Micrometer.
 
