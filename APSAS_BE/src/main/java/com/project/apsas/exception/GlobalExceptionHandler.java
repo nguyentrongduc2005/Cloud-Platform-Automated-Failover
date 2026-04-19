@@ -7,6 +7,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
+import java.util.Arrays;
+
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -35,11 +37,21 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(value = MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse> handleArgumentNotValidException(MethodArgumentNotValidException ex) {
-        String errorCode = ex.getFieldError().getDefaultMessage();
-        ErrorCode error = ErrorCode.valueOf(errorCode);
+        String rawMessage = ex.getFieldError() != null
+            ? ex.getFieldError().getDefaultMessage()
+            : ErrorCode.VALIDATION_FAILED.getDefaultMessage();
+
+        ErrorCode error = Arrays.stream(ErrorCode.values())
+            .filter(code -> code.name().equals(rawMessage))
+            .findFirst()
+            .orElse(ErrorCode.VALIDATION_FAILED);
+
         ApiResponse apiResponse = new ApiResponse();
         apiResponse.setCode(error.getCode());
-        apiResponse.setMessage(error.getDefaultMessage());
+        // If validation message is not an enum key, return the original validator message.
+        apiResponse.setMessage(error == ErrorCode.VALIDATION_FAILED
+            ? rawMessage
+            : error.getDefaultMessage());
         return ResponseEntity.badRequest().body(apiResponse);
     }
 
