@@ -7,6 +7,10 @@ on:
     types: [completed]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-cloudrun-prod
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
@@ -77,6 +81,7 @@ jobs:
         run: |
           terraform plan \
             -input=false \
+            -lock-timeout=10m \
             -var="project_id=$PROJECT_ID" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="github_repository=${{ github.repository }}" \
@@ -91,6 +96,7 @@ jobs:
         run: |
           terraform apply -auto-approve \
             -input=false \
+            -lock-timeout=10m \
             -var="project_id=$PROJECT_ID" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="github_repository=${{ github.repository }}" \
