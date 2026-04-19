@@ -16,7 +16,8 @@ resource "google_project_service" "required_apis" {
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "sts.googleapis.com",
-    "container.googleapis.com"
+    "run.googleapis.com",
+    "compute.googleapis.com"
   ])
 
   project            = var.project_id
@@ -48,21 +49,15 @@ resource "google_project_iam_member" "cicd_artifact_registry_writer" {
   member  = "serviceAccount:${google_service_account.cicd.email}"
 }
 
-resource "google_project_iam_member" "gke_nodes_artifact_registry_reader" {
+resource "google_project_iam_member" "cicd_run_admin" {
   project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${google_service_account.cicd.email}"
 }
 
-resource "google_project_iam_member" "gke_robot_artifact_registry_reader" {
+resource "google_project_iam_member" "cicd_load_balancer_admin" {
   project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:service-${data.google_project.current.number}@container-engine-robot.iam.gserviceaccount.com"
-}
-
-resource "google_project_iam_member" "cicd_container_admin" {
-  project = var.project_id
-  role    = "roles/container.admin"
+  role    = "roles/compute.loadBalancerAdmin"
   member  = "serviceAccount:${google_service_account.cicd.email}"
 }
 

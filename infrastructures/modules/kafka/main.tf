@@ -9,18 +9,6 @@ terraform {
   }
 }
 
-data "google_compute_subnetwork" "primary" {
-  project = var.project_id
-  name    = var.primary_subnetwork_name
-  region  = var.primary_region
-}
-
-data "google_compute_subnetwork" "failover" {
-  project = var.project_id
-  name    = var.failover_subnetwork_name
-  region  = var.failover_region
-}
-
 resource "google_managed_kafka_cluster" "primary" {
   provider   = google-beta
   cluster_id = "${var.name_prefix}-primary-kafka"
@@ -35,7 +23,7 @@ resource "google_managed_kafka_cluster" "primary" {
   gcp_config {
     access_config {
       network_configs {
-        subnet = data.google_compute_subnetwork.primary.id
+        subnet = "projects/${var.project_id}/regions/${var.primary_region}/subnetworks/${var.primary_subnetwork_name}"
       }
     }
   }
@@ -56,7 +44,7 @@ resource "google_managed_kafka_cluster" "failover" {
   gcp_config {
     access_config {
       network_configs {
-        subnet = data.google_compute_subnetwork.failover.id
+        subnet = "projects/${var.project_id}/regions/${var.failover_region}/subnetworks/${var.failover_subnetwork_name}"
       }
     }
   }
