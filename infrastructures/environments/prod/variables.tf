@@ -259,6 +259,12 @@ variable "enable_db_seed_import" {
   default = false
 }
 
+variable "alert_email_addresses" {
+  type        = list(string)
+  default     = []
+  description = "Email addresses that receive Cloud Monitoring alerts"
+}
+
 variable "artifact_registry_repo_id" {
   type    = string
   default = "apsas-apps"
