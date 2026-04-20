@@ -74,7 +74,7 @@ locals {
   )
 
   # Usable immediately because Global LB IP is static.
-  fixed_domain_nip_io = "apsas.${module.global_load_balancer.global_ip}.nip.io"
+  fixed_domain_nip_io = "app.${module.global_load_balancer.global_ip}.nip.io"
 }
 
 resource "null_resource" "build_backend_image" {
@@ -93,7 +93,7 @@ gcloud builds submit APSAS_BE --project "${var.project_id}" --tag "${local.backe
 EOC
   }
 
-  depends_on = [module.security_and_ci]
+  depends_on = [module.platform_services]
 }
 
 resource "null_resource" "build_frontend_image" {
@@ -112,21 +112,15 @@ gcloud builds submit APSAS_FE --project "${var.project_id}" --tag "${local.front
 EOC
   }
 
-  depends_on = [module.security_and_ci]
+  depends_on = [module.platform_services]
 }
 
-module "security_and_ci" {
-  source = "../../modules/security_and_ci"
+module "platform_services" {
+  source = "../../modules/platform_services"
 
-  project_id                    = var.project_id
-  region                        = var.primary_region
-  artifact_registry_repo_id     = var.artifact_registry_repo_id
-  github_repository             = var.github_repository
-  github_branch                 = var.github_branch
-  workload_identity_pool_id     = var.workload_identity_pool_id
-  workload_identity_provider_id = var.workload_identity_provider_id
-  cicd_service_account_id       = var.cicd_service_account_id
-  terraform_state_bucket_name   = var.terraform_state_bucket_name
+  project_id                = var.project_id
+  region                    = var.primary_region
+  artifact_registry_repo_id = var.artifact_registry_repo_id
 }
 
 module "cloud_run" {
@@ -188,37 +182,6 @@ module "global_load_balancer" {
   frontend_failover_service_name = module.cloud_run.frontend_failover_name
 
   enable_failover_backends = var.enable_failover_traffic
-}
-
-resource "google_project_service" "dns_api" {
-  count              = var.enable_cloud_dns ? 1 : 0
-  project            = var.project_id
-  service            = "dns.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_dns_managed_zone" "public" {
-  count = var.enable_cloud_dns ? 1 : 0
-
-  project     = var.project_id
-  name        = var.dns_zone_name
-  dns_name    = var.dns_domain_name
-  description = "Public DNS zone for APSAS load balancer"
-
-  visibility = "public"
-
-  depends_on = [google_project_service.dns_api]
-}
-
-resource "google_dns_record_set" "app_a" {
-  count = var.enable_cloud_dns ? 1 : 0
-
-  project      = var.project_id
-  managed_zone = google_dns_managed_zone.public[0].name
-  name         = var.dns_record_fqdn
-  type         = "A"
-  ttl          = var.dns_record_ttl
-  rrdatas      = [module.global_load_balancer.global_ip]
 }
 
 module "monitoring" {

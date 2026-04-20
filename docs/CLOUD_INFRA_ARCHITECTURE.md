@@ -65,7 +65,7 @@ Các module lõi:
 - `infrastructures/modules/kafka/main.tf`
 - `infrastructures/modules/cloud_run/main.tf`
 - `infrastructures/modules/global_load_balancer/main.tf`
-- `infrastructures/modules/security_and_ci/main.tf`
+- `infrastructures/modules/platform_services/main.tf`
 - `infrastructures/modules/monitoring/main.tf`
 
 ### 3.1 Mapping theo từng tầng hạ tầng
@@ -132,17 +132,14 @@ Global traffic control:
   - Tách route `/api` và route web.
   - Cho phép bật/tắt failover backends bằng cờ Terraform.
 
-Security và CI identity:
+Platform services:
 
-- Module: `infrastructures/modules/security_and_ci/main.tf`
+- Module: `infrastructures/modules/platform_services/main.tf`
 - Tài nguyên chính:
   - `google_artifact_registry_repository.containers`
-  - `google_service_account.cicd`
-  - `google_iam_workload_identity_pool.github`
-  - `google_iam_workload_identity_pool_provider.github`
 - Vai trò:
-  - Cấp quyền deploy cho GitHub Actions qua WIF.
-  - Build/push image vào Artifact Registry an toàn.
+  - Cung cấp nơi lưu image container cho hệ thống.
+  - Bật các API nền tảng cần thiết cho hạ tầng.
 
 Observability:
 

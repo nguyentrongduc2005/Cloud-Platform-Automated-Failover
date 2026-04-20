@@ -255,31 +255,6 @@ variable "enable_failover_traffic" {
   default = false
 }
 
-variable "enable_cloud_dns" {
-  type    = bool
-  default = false
-}
-
-variable "dns_zone_name" {
-  type    = string
-  default = "apsas-public-zone"
-}
-
-variable "dns_domain_name" {
-  type    = string
-  default = ""
-}
-
-variable "dns_record_fqdn" {
-  type    = string
-  default = ""
-}
-
-variable "dns_record_ttl" {
-  type    = number
-  default = 300
-}
-
 variable "db_seed_bucket_name" {
   type    = string
   default = "store-script-db"
@@ -304,33 +279,4 @@ variable "alert_email_addresses" {
 variable "artifact_registry_repo_id" {
   type    = string
   default = "apsas-apps"
-}
-
-variable "github_repository" {
-  type = string
-}
-
-variable "github_branch" {
-  type    = string
-  default = "main"
-}
-
-variable "workload_identity_pool_id" {
-  type    = string
-  default = "github-pool"
-}
-
-variable "workload_identity_provider_id" {
-  type    = string
-  default = "github-provider"
-}
-
-variable "cicd_service_account_id" {
-  type    = string
-  default = "github-actions-cicd"
-}
-
-variable "terraform_state_bucket_name" {
-  type    = string
-  default = "apsas-tf-state-prod-bucket"
 }

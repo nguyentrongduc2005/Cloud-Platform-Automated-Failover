@@ -56,15 +56,12 @@ flowchart LR
         FEF --> LOG
         LB --> MON
 
-        subgraph CICD[CI/CD]
-            GH[GitHub Actions]
-            WIF[Workload Identity Federation]
+        subgraph OPS[Vận hành hạ tầng]
             AR[Artifact Registry]
-            TF[Terraform Apply]
+            TF[Terraform Apply thủ công]
         end
 
-        GH --> WIF --> AR
-        GH --> WIF --> TF
+        TF --> AR
         TF --> BEP
         TF --> BEF
         TF --> FEP
@@ -83,7 +80,7 @@ flowchart LR
 - Backend primary và failover đều được cấu hình truy cập DB active qua biến `MYSQL` do Terraform quản lý.
 - Cloud SQL có replica cross-region để sẵn sàng promote khi sự cố.
 - Monitoring + Logging dùng để theo dõi uptime và cảnh báo lỗi.
-- CI/CD dùng GitHub Actions + WIF để build image và apply hạ tầng.
+- Hệ thống hiện tập trung vận hành hạ tầng thủ công qua Terraform và `gcloud`.
 
 ## 3) Mapping hạ tầng với Terraform
 
@@ -93,7 +90,7 @@ flowchart LR
 - Database + Redis: `infrastructures/modules/database/main.tf`
 - Kafka: `infrastructures/modules/kafka/main.tf`
 - Monitoring: `infrastructures/modules/monitoring/main.tf`
-- Security/CI: `infrastructures/modules/security_and_ci/main.tf`
+- Platform services: `infrastructures/modules/platform_services/main.tf`
 - Root wiring production: `infrastructures/environments/prod/main.tf`
 
 ## 4) Ghi chú failover

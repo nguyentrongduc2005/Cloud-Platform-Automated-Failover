@@ -6,7 +6,7 @@ resource "google_compute_network" "vpc" {
   routing_mode            = "GLOBAL"
 }
 
-# 2. Tạo Subnet cho Primary Region (Kèm Secondary Ranges cho GKE)
+# 2. Tạo Subnet cho Primary Region (kèm secondary ranges dự phòng)
 resource "google_compute_subnetwork" "primary_subnet" {
   name                     = "${var.vpc_name}-primary-subnet"
   project                  = var.project_id
@@ -44,7 +44,7 @@ resource "google_compute_subnetwork" "failover_subnet" {
   }
 }
 
-# 4. Cloud Router & NAT cho Primary Region (Để Pods kết nối Internet ra ngoài)
+# 4. Cloud Router & NAT cho Primary Region (cho phép outbound internet)
 resource "google_compute_router" "primary_router" {
   name    = "${var.vpc_name}-primary-router"
   region  = var.primary_region

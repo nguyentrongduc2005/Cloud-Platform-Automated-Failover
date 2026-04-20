@@ -104,6 +104,7 @@ resource "google_cloud_run_v2_service" "backend_primary" {
 
       resources {
         limits = {
+          cpu    = "1000m"
           memory = "2Gi"
         }
       }
@@ -153,6 +154,7 @@ resource "google_cloud_run_v2_service" "backend_failover" {
 
       resources {
         limits = {
+          cpu    = "1000m"
           memory = "2Gi"
         }
       }

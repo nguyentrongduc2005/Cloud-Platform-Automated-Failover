@@ -86,24 +86,12 @@ output "backend_entrypoint_nip_io" {
   value = "http://${local.fixed_domain_nip_io}/api"
 }
 
-output "custom_dns_domain" {
-  value = var.enable_cloud_dns ? trimsuffix(var.dns_record_fqdn, ".") : null
-}
-
 output "artifact_registry_repository" {
-  value = module.security_and_ci.artifact_registry_repository
+  value = module.platform_services.artifact_registry_repository
 }
 
 output "artifact_registry_repository_url" {
-  value = module.security_and_ci.artifact_registry_repository_url
-}
-
-output "cicd_service_account_email" {
-  value = module.security_and_ci.cicd_service_account_email
-}
-
-output "github_workload_identity_provider" {
-  value = module.security_and_ci.github_workload_identity_provider
+  value = module.platform_services.artifact_registry_repository_url
 }
 
 output "monitoring_uptime_backend_check_id" {
