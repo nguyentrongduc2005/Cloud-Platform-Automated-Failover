@@ -14,6 +14,31 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   network                 = var.network_id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
+
+  # GCP often releases producer-service attachments asynchronously after SQL/Redis deletes.
+  # Retry the peering delete first, then let the provider finalize resource destruction.
+  provisioner "local-exec" {
+    when        = destroy
+    on_failure  = continue
+    interpreter = ["/bin/bash", "-lc"]
+    command     = <<-EOT
+      set -euo pipefail
+      NETWORK_PATH="${self.network}"
+      NETWORK_NAME="$${NETWORK_PATH##*/}"
+      for attempt in $(seq 1 30); do
+        if gcloud services vpc-peerings delete \
+          --network="$${NETWORK_NAME}" \
+          --service="servicenetworking.googleapis.com" \
+          --quiet >/dev/null 2>&1; then
+          exit 0
+        fi
+        echo "[service-networking] delete not ready yet (attempt $${attempt}/30), retrying in 20s"
+        sleep 20
+      done
+      echo "[service-networking] timed out waiting to delete peering, continuing to provider delete"
+      exit 0
+    EOT
+  }
 }
 
 # ==============================================================================

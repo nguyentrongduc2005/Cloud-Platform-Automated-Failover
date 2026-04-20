@@ -41,10 +41,17 @@ module "kafka" {
 }
 
 locals {
+  backend_image_resolved  = "${var.primary_region}-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repo_id}/apsas-backend:latest"
+  frontend_image_resolved = "${var.primary_region}-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repo_id}/apsas-frontend:latest"
+  active_db_private_ip    = var.active_db_private_ip_override != "" ? var.active_db_private_ip_override : module.database.primary_db_private_ip
+
+  backend_image_effective  = var.auto_build_images ? local.backend_image_resolved : var.backend_image
+  frontend_image_effective = var.auto_build_images ? local.frontend_image_resolved : var.frontend_image
+
   backend_env_vars_primary = merge(
     var.backend_env_vars_primary,
     {
-      MYSQL      = format("jdbc:mysql://%s:3306/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", module.database.primary_db_private_ip, var.db_name)
+      MYSQL      = format("jdbc:mysql://%s:3306/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", local.active_db_private_ip, var.db_name)
       USER       = var.db_user
       PASS       = var.db_password
       REDIS_HOST = module.database.primary_redis_ip
@@ -56,7 +63,7 @@ locals {
   backend_env_vars_failover = merge(
     var.backend_env_vars_failover,
     {
-      MYSQL            = format("jdbc:mysql://%s:3306/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", module.database.replica_db_private_ip, var.db_name)
+      MYSQL            = format("jdbc:mysql://%s:3306/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", local.active_db_private_ip, var.db_name)
       USER             = var.db_user
       PASS             = var.db_password
       REDIS_HOST       = module.database.failover_redis_ip
@@ -65,6 +72,47 @@ locals {
     },
     var.kafka_bootstrap_servers_failover != "" ? { KAFKA = var.kafka_bootstrap_servers_failover } : {}
   )
+
+  # Usable immediately because Global LB IP is static.
+  fixed_domain_nip_io = "apsas.${module.global_load_balancer.global_ip}.nip.io"
+}
+
+resource "null_resource" "build_backend_image" {
+  count = var.auto_build_images ? 1 : 0
+
+  triggers = {
+    image = local.backend_image_resolved
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-lc"]
+    command     = <<EOC
+set -euo pipefail
+cd "${path.root}/../../.."
+gcloud builds submit APSAS_BE --project "${var.project_id}" --tag "${local.backend_image_resolved}" --quiet
+EOC
+  }
+
+  depends_on = [module.security_and_ci]
+}
+
+resource "null_resource" "build_frontend_image" {
+  count = var.auto_build_images ? 1 : 0
+
+  triggers = {
+    image = local.frontend_image_resolved
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-lc"]
+    command     = <<EOC
+set -euo pipefail
+cd "${path.root}/../../.."
+gcloud builds submit APSAS_FE --project "${var.project_id}" --tag "${local.frontend_image_resolved}" --quiet
+EOC
+  }
+
+  depends_on = [module.security_and_ci]
 }
 
 module "security_and_ci" {
@@ -92,8 +140,8 @@ module "cloud_run" {
   frontend_service_name      = var.frontend_service_name
   runtime_service_account_id = var.runtime_service_account_id
 
-  backend_image  = var.backend_image
-  frontend_image = var.frontend_image
+  backend_image  = local.backend_image_effective
+  frontend_image = local.frontend_image_effective
 
   backend_env_vars_primary   = local.backend_env_vars_primary
   backend_env_vars_failover  = local.backend_env_vars_failover
@@ -118,6 +166,12 @@ module "cloud_run" {
   frontend_max_instances_primary  = var.frontend_max_instances_primary
   frontend_min_instances_failover = var.frontend_min_instances_failover
   frontend_max_instances_failover = var.frontend_max_instances_failover
+
+  depends_on = [
+    null_resource.build_backend_image,
+    null_resource.build_frontend_image,
+    null_resource.db_seed_import
+  ]
 }
 
 module "global_load_balancer" {
@@ -136,6 +190,37 @@ module "global_load_balancer" {
   enable_failover_backends = var.enable_failover_traffic
 }
 
+resource "google_project_service" "dns_api" {
+  count              = var.enable_cloud_dns ? 1 : 0
+  project            = var.project_id
+  service            = "dns.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_dns_managed_zone" "public" {
+  count = var.enable_cloud_dns ? 1 : 0
+
+  project     = var.project_id
+  name        = var.dns_zone_name
+  dns_name    = var.dns_domain_name
+  description = "Public DNS zone for APSAS load balancer"
+
+  visibility = "public"
+
+  depends_on = [google_project_service.dns_api]
+}
+
+resource "google_dns_record_set" "app_a" {
+  count = var.enable_cloud_dns ? 1 : 0
+
+  project      = var.project_id
+  managed_zone = google_dns_managed_zone.public[0].name
+  name         = var.dns_record_fqdn
+  type         = "A"
+  ttl          = var.dns_record_ttl
+  rrdatas      = [module.global_load_balancer.global_ip]
+}
+
 module "monitoring" {
   source = "../../modules/monitoring"
 
@@ -150,31 +235,73 @@ data "google_project" "current" {
   project_id = var.project_id
 }
 
+resource "google_project_service_identity" "cloudsql_service_agent" {
+  count    = var.enable_db_seed_import ? 1 : 0
+  project  = var.project_id
+  service  = "sqladmin.googleapis.com"
+  provider = google-beta
+}
+
+resource "null_resource" "cloudsql_service_agent_wait" {
+  count = var.enable_db_seed_import ? 1 : 0
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-lc"]
+    command     = "sleep 30"
+  }
+
+  depends_on = [google_project_service_identity.cloudsql_service_agent]
+}
+
 resource "google_storage_bucket_iam_member" "cloudsql_import_reader" {
   count  = var.enable_db_seed_import ? 1 : 0
   bucket = var.db_seed_bucket_name
   role   = "roles/storage.objectViewer"
-  member = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloud-sql.iam.gserviceaccount.com"
+  member = "serviceAccount:${google_project_service_identity.cloudsql_service_agent[0].email}"
+
+  depends_on = [
+    google_project_service_identity.cloudsql_service_agent,
+    null_resource.cloudsql_service_agent_wait
+  ]
 }
 
 resource "null_resource" "db_seed_import" {
   count = var.enable_db_seed_import ? 1 : 0
 
   triggers = {
-    instance = module.database.primary_db_instance_name
-    database = module.database.database_name
-    uris     = sha1(join(",", var.db_seed_import_uris))
+    instance           = module.database.primary_db_instance_name
+    database           = module.database.database_name
+    primary_private_ip = module.database.primary_db_private_ip
+    uris               = sha1(join(",", var.db_seed_import_uris))
   }
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-lc"]
     command     = <<EOC
 set -euo pipefail
+
+# IAM propagation after binding can take time.
+sleep 30
+
 for uri in ${join(" ", var.db_seed_import_uris)}; do
-  gcloud sql import sql "${module.database.primary_db_instance_name}" "$uri" \
-    --database="${module.database.database_name}" \
-    --project="${var.project_id}" \
-    --quiet || true
+  success=0
+  for attempt in $(seq 1 10); do
+    if gcloud sql import sql "${module.database.primary_db_instance_name}" "$uri" \
+      --database="${module.database.database_name}" \
+      --project="${var.project_id}" \
+      --quiet; then
+      success=1
+      break
+    fi
+
+    echo "Import failed for $uri (attempt $attempt/10). Retrying in 20s..."
+    sleep 20
+  done
+
+  if [[ "$success" -ne 1 ]]; then
+    echo "Failed to import $uri after retries"
+    exit 1
+  fi
 done
 EOC
   }

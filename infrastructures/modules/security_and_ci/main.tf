@@ -3,7 +3,19 @@ terraform {
     google = {
       source = "hashicorp/google"
     }
+    random = {
+      source = "hashicorp/random"
+    }
   }
+}
+
+resource "random_id" "wif_suffix" {
+  byte_length = 2
+}
+
+locals {
+  workload_identity_pool_id_resolved     = "${var.workload_identity_pool_id}-${random_id.wif_suffix.hex}"
+  workload_identity_provider_id_resolved = "${var.workload_identity_provider_id}-${random_id.wif_suffix.hex}"
 }
 
 data "google_project" "current" {
@@ -76,7 +88,7 @@ resource "google_storage_bucket_iam_member" "cicd_tf_state_admin" {
 
 resource "google_iam_workload_identity_pool" "github" {
   project                   = var.project_id
-  workload_identity_pool_id = var.workload_identity_pool_id
+  workload_identity_pool_id = local.workload_identity_pool_id_resolved
   display_name              = "GitHub Actions Pool"
   description               = "OIDC pool for GitHub Actions CI/CD"
 
@@ -86,7 +98,7 @@ resource "google_iam_workload_identity_pool" "github" {
 resource "google_iam_workload_identity_pool_provider" "github" {
   project                            = var.project_id
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
-  workload_identity_pool_provider_id = var.workload_identity_provider_id
+  workload_identity_pool_provider_id = local.workload_identity_provider_id_resolved
   display_name                       = "GitHub Actions Provider"
   description                        = "OIDC provider for GitHub Actions"
 

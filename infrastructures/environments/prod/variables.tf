@@ -47,6 +47,12 @@ variable "db_user" {
   default = "admin"
 }
 
+variable "active_db_private_ip_override" {
+  type        = string
+  default     = ""
+  description = "Optional DB private IP override used after DB promotion/failover; empty means module.database.primary_db_private_ip"
+}
+
 variable "primary_db_tier" {
   type    = string
   default = "db-custom-2-7680"
@@ -128,6 +134,11 @@ variable "backend_image" {
 
 variable "frontend_image" {
   type = string
+}
+
+variable "auto_build_images" {
+  type    = bool
+  default = true
 }
 
 variable "backend_min_instances_primary" {
@@ -242,6 +253,31 @@ variable "lb_name_prefix" {
 variable "enable_failover_traffic" {
   type    = bool
   default = false
+}
+
+variable "enable_cloud_dns" {
+  type    = bool
+  default = false
+}
+
+variable "dns_zone_name" {
+  type    = string
+  default = "apsas-public-zone"
+}
+
+variable "dns_domain_name" {
+  type    = string
+  default = ""
+}
+
+variable "dns_record_fqdn" {
+  type    = string
+  default = ""
+}
+
+variable "dns_record_ttl" {
+  type    = number
+  default = 300
 }
 
 variable "db_seed_bucket_name" {

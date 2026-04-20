@@ -135,7 +135,7 @@ resource "google_monitoring_alert_policy" "backend_error_logs" {
   conditions {
     display_name = "Backend error logs > 0 in 5m"
     condition_threshold {
-      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.backend_error_count.name}\""
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.backend_error_count.name}\" AND resource.type=\"cloud_run_revision\""
       duration        = "0s"
       comparison      = "COMPARISON_GT"
       threshold_value = 0
@@ -161,7 +161,7 @@ resource "google_monitoring_alert_policy" "frontend_error_logs" {
   conditions {
     display_name = "Frontend error logs > 0 in 5m"
     condition_threshold {
-      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.frontend_error_count.name}\""
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.frontend_error_count.name}\" AND resource.type=\"cloud_run_revision\""
       duration        = "0s"
       comparison      = "COMPARISON_GT"
       threshold_value = 0

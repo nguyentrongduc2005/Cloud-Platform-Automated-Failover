@@ -6,6 +6,11 @@
 
 This project focuses on building a highly resilient cloud infrastructure capable of **Automated Failover** and **Zero-Downtime**. Deployed on Google Cloud Platform (GCP) using Infrastructure as Code (IaC), the system is designed to monitor the health of application instances in real-time and automatically switch traffic to redundant backup nodes in the event of a critical failure, while elastically scaling based on traffic demands.
 
+## Architecture Documentation
+
+- Cloud infrastructure architecture and Terraform mapping: [docs/CLOUD_INFRA_ARCHITECTURE.md](docs/CLOUD_INFRA_ARCHITECTURE.md)
+- Cloud system architecture diagram (Mermaid): [docs/CLOUD_SYSTEM_DIAGRAM.md](docs/CLOUD_SYSTEM_DIAGRAM.md)
+
 ## 🏗 System Architecture
 
 The infrastructure implements a **Multi-Zone High Availability** topology to eliminate single points of failure.

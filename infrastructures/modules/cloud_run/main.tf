@@ -102,6 +102,12 @@ resource "google_cloud_run_v2_service" "backend_primary" {
     containers {
       image = var.backend_image
 
+      resources {
+        limits = {
+          memory = "2Gi"
+        }
+      }
+
       ports {
         container_port = 8080
       }
@@ -145,6 +151,12 @@ resource "google_cloud_run_v2_service" "backend_failover" {
     containers {
       image = var.backend_image
 
+      resources {
+        limits = {
+          memory = "2Gi"
+        }
+      }
+
       ports {
         container_port = 8080
       }
@@ -178,6 +190,11 @@ resource "google_cloud_run_v2_service" "frontend_primary" {
     scaling {
       min_instance_count = var.frontend_min_instances_primary
       max_instance_count = var.frontend_max_instances_primary
+    }
+
+    vpc_access {
+      connector = google_vpc_access_connector.primary.id
+      egress    = "ALL_TRAFFIC"
     }
 
     containers {
@@ -216,6 +233,11 @@ resource "google_cloud_run_v2_service" "frontend_failover" {
     scaling {
       min_instance_count = var.frontend_min_instances_failover
       max_instance_count = var.frontend_max_instances_failover
+    }
+
+    vpc_access {
+      connector = google_vpc_access_connector.failover.id
+      egress    = "ALL_TRAFFIC"
     }
 
     containers {

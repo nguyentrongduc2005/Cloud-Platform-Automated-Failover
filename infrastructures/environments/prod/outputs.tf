@@ -74,6 +74,22 @@ output "backend_entrypoint" {
   value = module.global_load_balancer.api_url
 }
 
+output "fixed_domain_nip_io" {
+  value = local.fixed_domain_nip_io
+}
+
+output "frontend_entrypoint_nip_io" {
+  value = "http://${local.fixed_domain_nip_io}"
+}
+
+output "backend_entrypoint_nip_io" {
+  value = "http://${local.fixed_domain_nip_io}/api"
+}
+
+output "custom_dns_domain" {
+  value = var.enable_cloud_dns ? trimsuffix(var.dns_record_fqdn, ".") : null
+}
+
 output "artifact_registry_repository" {
   value = module.security_and_ci.artifact_registry_repository
 }
