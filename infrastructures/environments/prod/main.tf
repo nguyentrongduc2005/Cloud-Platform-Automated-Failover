@@ -38,6 +38,8 @@ module "kafka" {
   failover_subnetwork_name = module.networking.failover_subnetwork_name
   kafka_vcpu_count         = var.kafka_vcpu_count
   kafka_memory_bytes       = var.kafka_memory_bytes
+
+  depends_on = [module.networking]
 }
 
 locals {
