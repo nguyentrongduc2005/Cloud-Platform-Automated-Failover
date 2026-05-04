@@ -256,11 +256,15 @@ if __name__ == "__main__":
   },
 ];
 
-export async function getStudentAssignments() {
+export async function getStudentAssignments(courseId) {
+  if (!courseId) {
+    return { course: mockCourse, assignments: mockAssignments };
+  }
+
   try {
-    const response = await api.get("/student/assignments");
+    const response = await api.get(`/assignment/${courseId}/assignments`);
     return response.data;
-  } catch (error) {
+  } catch {
     console.warn(
       "[assignmentService] FALLBACK MOCK DATA - Thay bằng API thật khi sẵn sàng."
     );
@@ -268,24 +272,39 @@ export async function getStudentAssignments() {
   }
 }
 
-export async function getStudentAssignmentDetail(assignmentId) {
-  if (!assignmentId) {
+export async function getStudentAssignmentDetail(courseId, assignmentId) {
+  let resolvedCourseId = courseId;
+  let resolvedAssignmentId = assignmentId;
+
+  // Backward compatibility with old signature getStudentAssignmentDetail(assignmentId)
+  if (assignmentId === undefined) {
+    resolvedAssignmentId = courseId;
+    resolvedCourseId = null;
+  }
+
+  if (!resolvedAssignmentId) {
     throw new Error("assignmentId is required");
   }
 
   try {
-    const response = await api.get(`/student/assignments/${assignmentId}`);
+    if (!resolvedCourseId) {
+      throw new Error("courseId is required for assignment detail API");
+    }
+
+    const response = await api.get(
+      `/assignment/${resolvedCourseId}/assignments/${resolvedAssignmentId}`
+    );
     return response.data;
-  } catch (error) {
+  } catch {
     console.warn(
       "[assignmentService] FALLBACK MOCK DETAIL - Thay bằng API thật khi sẵn sàng."
     );
     const assignment =
-      mockAssignments.find((item) => item.id === assignmentId) ??
+      mockAssignments.find((item) => item.id === resolvedAssignmentId) ??
       mockAssignments[0];
 
     if (!assignment) {
-      throw error;
+      throw new Error("Không tìm thấy assignment");
     }
 
     return { course: mockCourse, assignment };
@@ -299,7 +318,7 @@ export async function runAssignmentCode(assignmentId, payload) {
       payload
     );
     return response.data;
-  } catch (error) {
+  } catch {
     console.warn("[assignmentService] MOCK runAssignmentCode fallback");
     await new Promise((resolve) => setTimeout(resolve, 600));
     return {
@@ -321,7 +340,7 @@ export async function submitAssignmentCode(assignmentId, payload) {
       payload
     );
     return response.data;
-  } catch (error) {
+  } catch {
     console.warn("[assignmentService] MOCK submitAssignmentCode fallback");
     await new Promise((resolve) => setTimeout(resolve, 900));
     return {

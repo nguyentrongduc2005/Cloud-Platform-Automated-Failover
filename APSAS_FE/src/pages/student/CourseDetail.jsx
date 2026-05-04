@@ -29,6 +29,7 @@ export default function StudentCourseDetail() {
     searchParams.get("tab") === "assignments" ? "assignments" : "overview";
   const [activeTab, setActiveTab] = useState(initialTab);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [helpTitle, setHelpTitle] = useState("");
   const [helpContent, setHelpContent] = useState("");
   const [isSubmittingHelp, setIsSubmittingHelp] = useState(false);
   
@@ -560,6 +561,7 @@ export default function StudentCourseDetail() {
               <button
                 onClick={() => {
                   setShowHelpModal(false);
+                  setHelpTitle("");
                   setHelpContent("");
                 }}
                 className="px-5 py-2.5 rounded-lg border border-[#202934] text-gray-300 hover:text-white hover:border-gray-600 transition font-medium"

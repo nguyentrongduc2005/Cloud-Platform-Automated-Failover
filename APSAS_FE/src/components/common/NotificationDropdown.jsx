@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Bell, Check, CheckCheck, Trash2, X } from "lucide-react";
 import notificationService from "../../services/notificationService";
 
@@ -11,24 +11,25 @@ export default function NotificationDropdown() {
   const dropdownRef = useRef(null);
 
   // Fetch notifications
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
       const params = {
-        page: 0,
-        size: 20,
+        page: 1,
+        limit: 20,
       };
       
       const result = await notificationService.getNotifications(params);
       
       // Handle response format
       let notificationList = [];
-      if (result.data) {
-        if (Array.isArray(result.data)) {
-          notificationList = result.data;
-        } else if (result.data.content && Array.isArray(result.data.content)) {
-          notificationList = result.data.content;
-        }
+      const payload = result?.data;
+      if (Array.isArray(payload?.data)) {
+        notificationList = payload.data;
+      } else if (Array.isArray(payload?.content)) {
+        notificationList = payload.content;
+      } else if (Array.isArray(payload)) {
+        notificationList = payload;
       }
       
       // Filter based on selected filter
@@ -49,7 +50,7 @@ export default function NotificationDropdown() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
 
   // Fetch unread count
   const fetchUnreadCount = async () => {
@@ -124,7 +125,7 @@ export default function NotificationDropdown() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isOpen, filter]);
+  }, [isOpen, fetchNotifications]);
 
   // Fetch unread count on mount and periodically
   useEffect(() => {
@@ -163,7 +164,7 @@ export default function NotificationDropdown() {
           if (parsed.message) {
             return parsed.message;
           }
-        } catch (e) {
+        } catch {
           // Nếu không phải JSON, dùng payload như string
           return notification.payload;
         }

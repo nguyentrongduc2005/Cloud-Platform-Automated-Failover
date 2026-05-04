@@ -32,18 +32,28 @@ const notificationService = {
 
   /**
    * Get notifications for current user
-   * GET /notifications?page=0&size=10
+   * GET /notifications?page=1&limit=20
    * @param {Object} params - Query parameters
-   * @param {number} params.page - Page number (0-based)
-   * @param {number} params.size - Page size
+   * @param {number} params.page - Page number (1-based)
+   * @param {number} params.limit - Page size
+   * @param {number} params.size - Backward-compatible alias for limit
    * @returns {Promise<{code: string, message: string, data: Object}>}
    */
   async getNotifications(params = {}) {
     try {
+      const rawPage = Number(params.page);
+      const page = Number.isFinite(rawPage) ? Math.max(1, rawPage) : 1;
+      const rawLimit = Number(params.limit ?? params.size);
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 20;
+
       const queryParams = {
-        page: params.page !== undefined ? params.page : 0,
-        size: params.size || 10,
+        page,
+        limit,
       };
+
+      if (params.isRead !== undefined) {
+        queryParams.isRead = params.isRead;
+      }
       
       const response = await api.get("/notifications", { params: queryParams });
       return response.data;

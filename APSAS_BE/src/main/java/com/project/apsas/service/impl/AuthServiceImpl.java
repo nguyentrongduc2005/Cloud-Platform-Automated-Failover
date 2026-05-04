@@ -26,6 +26,7 @@ import com.project.apsas.mapper.UserMapper;
 import com.project.apsas.repository.*;
 
 import com.project.apsas.service.AuthService;
+import com.project.apsas.service.MailService;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,7 @@ public class AuthServiceImpl implements AuthService {
     PasswordEncoder passwordEncoder;
     UserMapper mapper;
     KafkaMailProducer mailProducer;
+    MailService mailService;
     RefreshTokenRepository refreshTokenRepository;
     JdbcTemplate jdbcTemplate;
 
@@ -290,7 +292,8 @@ public class AuthServiceImpl implements AuthService {
         try {
             sendOtpMail(email, user.getName(), code, VERIFY_TTL_MINUTES);
         } catch (Exception ex) {
-            throw new AppException(ErrorCode.INTERNAL_ERROR);
+            // Do not fail resend flow if queue is degraded; OTP is already persisted.
+            log.error("Failed to send OTP email for {} in resend flow.", email, ex);
         }
     }
 
@@ -309,7 +312,13 @@ public class AuthServiceImpl implements AuthService {
                 .name(name)
                 .params(params)
                 .build();
-        mailProducer.push(TOPIC_MAIL, event.getToEmail(), event);
+        try {
+            mailProducer.push(TOPIC_MAIL, event.getToEmail(), event);
+        } catch (Exception ex) {
+            // Fallback to direct provider call when Kafka is unavailable.
+            log.warn("Kafka enqueue failed for {}. Falling back to direct mail send.", to, ex);
+            mailService.sendTransactionalEmail(to, name, params);
+        }
     }
 
     private String otpKey(String email) {

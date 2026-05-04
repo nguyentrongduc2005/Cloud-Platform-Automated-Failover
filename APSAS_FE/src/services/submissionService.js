@@ -54,8 +54,9 @@ export const pollSubmissionResult = async (submissionId, options = {}) => {
         onProgress(response, attempts);
       }
 
-      // Check if submission is complete
-      if (response?.data?.status === "COMPLETE") {
+      // Treat both success and failed statuses as terminal states.
+      const status = String(response?.data?.status || "").toUpperCase();
+      if (["COMPLETE", "COMPLETED", "FAILED"].includes(status)) {
         return response;
       }
 
@@ -66,7 +67,7 @@ export const pollSubmissionResult = async (submissionId, options = {}) => {
       } else {
         throw new Error("Polling timeout - submission taking too long");
       }
-    } catch (error) {
+    } catch {
       if (attempts >= maxAttempts) {
         throw new Error("Max polling attempts reached");
       }
