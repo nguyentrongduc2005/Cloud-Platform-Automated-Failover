@@ -17,6 +17,12 @@ The infrastructure implements a **Multi-Region High Availability** topology on C
 
 ![Architecture Diagram](resources/Gemini_Generated_Image_5ugqs15ugqs15ugq.png)
 
+### Failover Evidence
+
+The chart below shows request traffic shifting from one region to the other when a region is down. This is the operational proof that the load balancer continues serving users through the healthy region instead of stopping at the failed one.
+
+![Failover traffic screenshot](resources/result.png)
+
 **Core Architectural Components:**
 
 - **Cloud Load Balancing:** Acts as the global entry point, performing health checks and intelligently routing user traffic away from degraded zones.
