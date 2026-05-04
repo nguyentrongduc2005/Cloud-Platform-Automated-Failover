@@ -15,7 +15,7 @@ This project focuses on building a highly resilient cloud infrastructure capable
 
 The infrastructure implements a **Multi-Region High Availability** topology on Cloud Run to eliminate single points of failure.
 
-![Architecture Diagram](https://via.placeholder.com/800x400?text=Insert+Architecture+Diagram+Here)
+![Architecture Diagram](resources/Gemini_Generated_Image_5ugqs15ugqs15ugq.png)
 
 **Core Architectural Components:**
 
